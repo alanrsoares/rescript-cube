@@ -84,7 +84,7 @@ external castMeshToSingleMaterialObj: mesh => singleMaterialMeshObj = "%identity
 external castDomElem: Dom.element => domElemObj = "%identity"
 external castEvtObj: Dom.event => evtObj = "%identity"
 
-let pi = 3.14159265358979323846
+let pi = Math.Constants.pi
 let turnPixels = 120.0
 let commitTurnAt = 0.35
 let cubeBoundingRadius = 2.55
