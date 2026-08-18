@@ -34,6 +34,16 @@ type animationState = {
   mutable animSpeed: float, // radians per frame, default ~0.18
 }
 
+// An in-flight ease from wherever the drag left the camera to the nearest
+// detent. Directions are unit vectors; `distance` preserves the user's zoom.
+type cameraSnap = {
+  startDirection: vector3,
+  startUp: vector3,
+  targetDirection: vector3,
+  distance: float,
+  mutable elapsed: float,
+}
+
 type cubeContext = {
   scene: scene,
   sceneRoot: group,
@@ -50,6 +60,10 @@ type cubeContext = {
   mutable activeGesture: option<activeGesture>,
   mutable fittedCanvasWidth: float,
   mutable fittedCanvasHeight: float,
+  canvasElem: Dom.element,
+  mutable cameraSnap: option<cameraSnap>,
+  mutable onCanvasPointerDown: Dom.event => unit,
+  mutable onWindowPointerRelease: Dom.event => unit,
 }
 
 type rectObj = {
@@ -83,6 +97,12 @@ external castMeshToObj: mesh => meshObj = "%identity"
 external castMeshToSingleMaterialObj: mesh => singleMaterialMeshObj = "%identity"
 external castDomElem: Dom.element => domElemObj = "%identity"
 external castEvtObj: Dom.event => evtObj = "%identity"
+
+@val
+external addWindowEventListener: (string, Dom.event => unit) => unit = "window.addEventListener"
+@val
+external removeWindowEventListener: (string, Dom.event => unit) => unit =
+  "window.removeEventListener"
 
 let pi = Math.Constants.pi
 let turnPixels = 120.0
@@ -460,6 +480,74 @@ let resolveGesture = (ctx: cubeContext, dt: dragTarget, dx: float, dy: float): o
 // and turn simulation derived from those events.
 let dragThresholdPx = 10.0
 
+// Camera detents
+//
+// A free camera can be left at any angle, including ones where the cube reads
+// as an unrecognisable sliver. On release it eases to the nearest of the eight
+// corner views: from each of those exactly three faces are visible with the
+// world up-vector upright, which is how the cube is taught and drawn.
+let snapDuration = 0.28
+
+let isometricDirections = {
+  let unit = 1.0 /. Math.sqrt(3.0)
+  [
+    (1.0, 1.0, 1.0),
+    (1.0, 1.0, -1.0),
+    (1.0, -1.0, 1.0),
+    (1.0, -1.0, -1.0),
+    (-1.0, 1.0, 1.0),
+    (-1.0, 1.0, -1.0),
+    (-1.0, -1.0, 1.0),
+    (-1.0, -1.0, -1.0),
+  ]->Array.map(((x, y, z)) => createVector3(x *. unit, y *. unit, z *. unit))
+}
+
+// Nearest by dot product: for unit vectors the largest dot is the smallest angle.
+let nearestIsometric = (direction: vector3): vector3 =>
+  isometricDirections->Array.reduce(isometricDirections->Array.getUnsafe(0), (best, candidate) =>
+    dotVector3(candidate, direction) > dotVector3(best, direction) ? candidate : best
+  )
+
+let beginCameraSnap = (ctx: cubeContext) => {
+  let cam = perspectiveToCamera(ctx.camera)
+  let position = cameraPosition(cam)
+  let distance = lengthVector3(position)
+  if distance > 0.0001 {
+    let direction = cloneVector3(position)->normalizeVector3
+    ctx.cameraSnap = Some({
+      startDirection: direction,
+      startUp: cloneVector3(getUp(cam)),
+      targetDirection: nearestIsometric(direction),
+      distance,
+      elapsed: 0.0,
+    })
+  }
+}
+
+// Runs instead of the trackball update, not alongside it: the controls carry a
+// damping tail after release that would otherwise pull against the ease.
+let updateCameraSnap = (ctx: cubeContext, deltaSeconds: float) =>
+  switch ctx.cameraSnap {
+  | None => ()
+  | Some(snap) =>
+    snap.elapsed = snap.elapsed +. deltaSeconds
+    let progress = Math.min(1.0, snap.elapsed /. snapDuration)
+    let eased = easeInOutCubic(progress)
+    let cam = perspectiveToCamera(ctx.camera)
+    let direction =
+      cloneVector3(snap.startDirection)->lerpVector3(snap.targetDirection, eased)->normalizeVector3
+    setPositionVec(cam, multiplyScalarVector3(direction, snap.distance))
+    let _ =
+      getUp(cam)
+      ->copyVector3(snap.startUp)
+      ->lerpVector3(createVector3(0.0, 1.0, 0.0), eased)
+      ->normalizeVector3
+    lookAtCamera(cam, 0.0, 0.0, 0.0)
+    if progress >= 1.0 {
+      ctx.cameraSnap = None
+    }
+  }
+
 let beginGesture = (
   ctx: cubeContext,
   m: move,
@@ -592,7 +680,10 @@ let init = (
   ~renderer: webGLRenderer,
   initialTheme: themeName,
 ): cubeContext => {
-  let _ = setVector3(cameraPosition(perspectiveToCamera(camera)), 6.0, 5.0, 7.0)
+  // Start on a detent, so the opening framing matches every position the camera
+  // settles into afterwards. Only the direction matters: `fitCameraToCanvas`
+  // sets the distance.
+  let _ = setVector3(cameraPosition(perspectiveToCamera(camera)), 1.0, 1.0, 1.0)
   let canvasElem = domElementRenderer(renderer)
 
   // Without this, browsers claim touch drags for scroll/zoom and no move fires.
@@ -621,8 +712,11 @@ let init = (
   // up-vector, so the cube tumbles freely on every axis instead of stalling at
   // the poles while spinning without limit horizontally.
   let controls = createTrackballControls(perspectiveToCamera(camera), canvasElem)
-  setStaticMovingTrackballControls(controls, false)
-  setDynamicDampingFactorTrackballControls(controls, 0.12)
+  // No inertia: the damping tail keeps applying a decaying rotation to both the
+  // eye and the up-vector on every update, which would pull the camera straight
+  // back off the detent it just settled onto. Releasing snaps instead, so the
+  // drag can track the pointer exactly.
+  setStaticMovingTrackballControls(controls, true)
   setRotateSpeedTrackballControls(controls, 2.4)
   setZoomSpeedTrackballControls(controls, 1.0)
   // The cube is the only subject and `fitCameraToCanvas` frames it around the
@@ -694,7 +788,22 @@ let init = (
     activeGesture: None,
     fittedCanvasWidth: 0.0,
     fittedCanvasHeight: 0.0,
+    canvasElem,
+    cameraSnap: None,
+    onCanvasPointerDown: _ => (),
+    onWindowPointerRelease: _ => (),
   }
+
+  // Assigned after construction rather than through a spread: a closure built
+  // inside the record literal would capture the record being copied, not this
+  // one, and its writes would land on a value nothing else can see.
+  // Release is watched on `window` so a drag ending outside the canvas still
+  // settles the camera.
+  ctx.onCanvasPointerDown = _ => ctx.cameraSnap = None
+  ctx.onWindowPointerRelease = _ => beginCameraSnap(ctx)
+  castDomElem(canvasElem).addEventListener("pointerdown", ctx.onCanvasPointerDown)
+  addWindowEventListener("pointerup", ctx.onWindowPointerRelease)
+  addWindowEventListener("pointercancel", ctx.onWindowPointerRelease)
 
   ctx
 }
@@ -708,6 +817,9 @@ let dispose = (ctx: cubeContext) => {
   if ctx.animState.isAnimating {
     remove(ctx.sceneRoot, ctx.animState.pivotGroup)
   }
+  castDomElem(ctx.canvasElem).removeEventListener("pointerdown", ctx.onCanvasPointerDown)
+  removeWindowEventListener("pointerup", ctx.onWindowPointerRelease)
+  removeWindowEventListener("pointercancel", ctx.onWindowPointerRelease)
   disposeTrackballControls(ctx.cameraControls)
   removeScene(ctx.scene, ctx.sceneRoot)
 }

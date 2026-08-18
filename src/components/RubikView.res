@@ -34,7 +34,10 @@ module CubeScene = {
       switch ctxRef.current {
       | Some(ctx) =>
         fitCameraToCanvas(ctx, r3f.size.width, r3f.size.height)
-        updateTrackballControls(ctx.cameraControls)
+        switch ctx.cameraSnap {
+        | Some(_) => updateCameraSnap(ctx, deltaSeconds)
+        | None => updateTrackballControls(ctx.cameraControls)
+        }
         updateAnimation(ctx, deltaSeconds)
       | None => ()
       }
