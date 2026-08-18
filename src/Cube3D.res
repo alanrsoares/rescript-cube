@@ -40,6 +40,7 @@ type cameraSnap = {
   startDirection: vector3,
   startUp: vector3,
   targetDirection: vector3,
+  targetUp: vector3,
   distance: float,
   mutable elapsed: float,
 }
@@ -483,30 +484,45 @@ let dragThresholdPx = 10.0
 // Camera detents
 //
 // A free camera can be left at any angle, including ones where the cube reads
-// as an unrecognisable sliver. On release it eases to the nearest of the eight
-// corner views: from each of those exactly three faces are visible with the
-// world up-vector upright, which is how the cube is taught and drawn.
+// as an unrecognisable sliver. On release it eases to a resting view that puts
+// one face squarely in front of the user: the nearest face normal, with the
+// up-vector on one of the four axes square to it.
 let snapDuration = 0.28
 
-let isometricDirections = {
-  let unit = 1.0 /. Math.sqrt(3.0)
-  [
-    (1.0, 1.0, 1.0),
-    (1.0, 1.0, -1.0),
-    (1.0, -1.0, 1.0),
-    (1.0, -1.0, -1.0),
-    (-1.0, 1.0, 1.0),
-    (-1.0, 1.0, -1.0),
-    (-1.0, -1.0, 1.0),
-    (-1.0, -1.0, -1.0),
-  ]->Array.map(((x, y, z)) => createVector3(x *. unit, y *. unit, z *. unit))
-}
+// How far the camera is raised off that face normal. Dead-on reads as a flat 2D
+// grid, so the view is lifted just enough to keep a sliver of the neighbouring
+// face, and with it the sense of depth the coach's algorithms rely on.
+let detentTiltDegrees = 20.0
+
+let axisDirections = [
+  createVector3(1.0, 0.0, 0.0),
+  createVector3(-1.0, 0.0, 0.0),
+  createVector3(0.0, 1.0, 0.0),
+  createVector3(0.0, -1.0, 0.0),
+  createVector3(0.0, 0.0, 1.0),
+  createVector3(0.0, 0.0, -1.0),
+]
 
 // Nearest by dot product: for unit vectors the largest dot is the smallest angle.
-let nearestIsometric = (direction: vector3): vector3 =>
-  isometricDirections->Array.reduce(isometricDirections->Array.getUnsafe(0), (best, candidate) =>
-    dotVector3(candidate, direction) > dotVector3(best, direction) ? candidate : best
+let nearestAxis = (candidates: array<vector3>, target: vector3): vector3 =>
+  candidates->Array.reduce(candidates->Array.getUnsafe(0), (best, candidate) =>
+    dotVector3(candidate, target) > dotVector3(best, target) ? candidate : best
   )
+
+// `up` has to be square to the viewing direction, so the four axes perpendicular
+// to it are the only valid choices. Picking the nearest of those preserves an
+// upside-down view rather than rolling it back upright.
+let squareUpCandidates = (direction: vector3): array<vector3> =>
+  axisDirections->Array.filter(axis => Math.abs(dotVector3(axis, direction)) < 0.5)
+
+// The resting direction for a face: its normal, raised toward the chosen up.
+let detentDirection = (faceNormal: vector3, up: vector3): vector3 => {
+  let tilt = detentTiltDegrees *. pi /. 180.0
+  cloneVector3(faceNormal)
+  ->multiplyScalarVector3(Math.cos(tilt))
+  ->addScaledVector3(up, Math.sin(tilt))
+  ->normalizeVector3
+}
 
 let beginCameraSnap = (ctx: cubeContext) => {
   let cam = perspectiveToCamera(ctx.camera)
@@ -514,10 +530,16 @@ let beginCameraSnap = (ctx: cubeContext) => {
   let distance = lengthVector3(position)
   if distance > 0.0001 {
     let direction = cloneVector3(position)->normalizeVector3
+    let currentUp = cloneVector3(getUp(cam))
+    let faceNormal = nearestAxis(axisDirections, direction)
+    // Chosen from the current up rather than forced to world +Y, so a view that
+    // tumbled over the top stays inverted instead of rolling back.
+    let targetUp = nearestAxis(squareUpCandidates(faceNormal), currentUp)
     ctx.cameraSnap = Some({
       startDirection: direction,
-      startUp: cloneVector3(getUp(cam)),
-      targetDirection: nearestIsometric(direction),
+      startUp: currentUp,
+      targetDirection: detentDirection(faceNormal, targetUp),
+      targetUp,
       distance,
       elapsed: 0.0,
     })
@@ -540,7 +562,7 @@ let updateCameraSnap = (ctx: cubeContext, deltaSeconds: float) =>
     let _ =
       getUp(cam)
       ->copyVector3(snap.startUp)
-      ->lerpVector3(createVector3(0.0, 1.0, 0.0), eased)
+      ->lerpVector3(snap.targetUp, eased)
       ->normalizeVector3
     lookAtCamera(cam, 0.0, 0.0, 0.0)
     if progress >= 1.0 {
@@ -683,7 +705,13 @@ let init = (
   // Start on a detent, so the opening framing matches every position the camera
   // settles into afterwards. Only the direction matters: `fitCameraToCanvas`
   // sets the distance.
-  let _ = setVector3(cameraPosition(perspectiveToCamera(camera)), 1.0, 1.0, 1.0)
+  let home = detentDirection(createVector3(0.0, 0.0, 1.0), createVector3(0.0, 1.0, 0.0))
+  let _ = setVector3(
+    cameraPosition(perspectiveToCamera(camera)),
+    xVector3(home),
+    yVector3(home),
+    zVector3(home),
+  )
   let canvasElem = domElementRenderer(renderer)
 
   // Without this, browsers claim touch drags for scroll/zoom and no move fires.
