@@ -34,7 +34,7 @@ module CubeScene = {
       switch ctxRef.current {
       | Some(ctx) =>
         fitCameraToCanvas(ctx, r3f.size.width, r3f.size.height)
-        updateOrbitControls(ctx.orbitControls)
+        updateTrackballControls(ctx.cameraControls)
         updateAnimation(ctx, deltaSeconds)
       | None => ()
       }

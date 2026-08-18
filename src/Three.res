@@ -16,7 +16,7 @@ type matrix4
 type quaternion
 type euler
 type faceInfo
-type orbitControls
+type trackballControls
 
 external perspectiveToCamera: perspectiveCamera => camera = "%identity"
 
@@ -115,16 +115,30 @@ external createDirectionalLight: (int, float) => directionalLight = "Directional
 // Face picking (R3F does the raycasting; we only read the hit face)
 @get external getFaceNormal: faceInfo => vector3 = "normal"
 
-// Orbit Controls
-@module("three/examples/jsm/controls/OrbitControls.js") @new
-external createOrbitControls: (camera, Dom.element) => orbitControls = "OrbitControls"
-@send external updateOrbitControls: orbitControls => unit = "update"
-@set external setEnableRotateOrbitControls: (orbitControls, bool) => unit = "enableRotate"
-@set external setEnableDampingOrbitControls: (orbitControls, bool) => unit = "enableDamping"
-@set external setDampingFactorOrbitControls: (orbitControls, float) => unit = "dampingFactor"
-@set external setMinDistanceOrbitControls: (orbitControls, float) => unit = "minDistance"
-@set external setMaxDistanceOrbitControls: (orbitControls, float) => unit = "maxDistance"
-@send external disposeOrbitControls: orbitControls => unit = "dispose"
+// Trackball Controls
+//
+// Chosen over OrbitControls so the cube tumbles freely on both axes: orbiting
+// pins an up-vector, which stops the camera dead at the poles while letting it
+// spin without limit horizontally.
+@module("three/examples/jsm/controls/TrackballControls.js") @new
+external createTrackballControls: (camera, Dom.element) => trackballControls = "TrackballControls"
+@send external updateTrackballControls: trackballControls => unit = "update"
+// Caches the canvas rect, so it must be re-run whenever the canvas resizes.
+@send external handleResizeTrackballControls: trackballControls => unit = "handleResize"
+@send external disposeTrackballControls: trackballControls => unit = "dispose"
+@set external setNoRotateTrackballControls: (trackballControls, bool) => unit = "noRotate"
+@set external setNoPanTrackballControls: (trackballControls, bool) => unit = "noPan"
+@set external setStaticMovingTrackballControls: (trackballControls, bool) => unit = "staticMoving"
+@set
+external setDynamicDampingFactorTrackballControls: (trackballControls, float) => unit =
+  "dynamicDampingFactor"
+@set external setRotateSpeedTrackballControls: (trackballControls, float) => unit = "rotateSpeed"
+@set external setZoomSpeedTrackballControls: (trackballControls, float) => unit = "zoomSpeed"
+@set external setMinDistanceTrackballControls: (trackballControls, float) => unit = "minDistance"
+@set external setMaxDistanceTrackballControls: (trackballControls, float) => unit = "maxDistance"
+// Defaults to ["KeyA", "KeyS", "KeyD"] on `window`, which would swallow the
+// S and D move shortcuts. An empty list disables the modifiers entirely.
+@set external setKeysTrackballControls: (trackballControls, array<string>) => unit = "keys"
 
 // DOM helpers for pointer gestures
 type cssStyle = {mutable touchAction: string}

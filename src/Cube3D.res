@@ -40,7 +40,7 @@ type cubeContext = {
   camera: perspectiveCamera,
   cubeGroup: group,
   coreMesh: mesh,
-  orbitControls: orbitControls,
+  cameraControls: trackballControls,
   cubies: array<mesh>,
   cubieHomes: array<(int, int, int)>,
   animState: animationState,
@@ -113,8 +113,11 @@ let fitCameraToCanvas = (ctx: cubeContext, width: float, height: float) => {
       cubeBoundingRadius /.
       Math.sin(Math.min(halfVerticalFov, halfHorizontalFov)) *.
       cameraFitPadding
-    setMinDistanceOrbitControls(ctx.orbitControls, fitDistance *. closestZoomRatio)
-    setMaxDistanceOrbitControls(ctx.orbitControls, fitDistance *. furthestZoomRatio)
+    setMinDistanceTrackballControls(ctx.cameraControls, fitDistance *. closestZoomRatio)
+    setMaxDistanceTrackballControls(ctx.cameraControls, fitDistance *. furthestZoomRatio)
+    // TrackballControls maps drags through a cached canvas rect, so a resize
+    // must invalidate it or every rotation is scaled against stale dimensions.
+    handleResizeTrackballControls(ctx.cameraControls)
     let direction = cameraPosition(perspectiveToCamera(camera))->cloneVector3->normalizeVector3
     setPositionVec(camera, direction->multiplyScalarVector3(fitDistance))
     lookAtCamera(perspectiveToCamera(camera), 0.0, 0.0, 0.0)
@@ -515,7 +518,7 @@ let settleGesture = (ctx: cubeContext, commit: bool) => {
 
 let endGesture = (ctx: cubeContext) => {
   ctx.dragTarget = None
-  setEnableRotateOrbitControls(ctx.orbitControls, true)
+  setNoRotateTrackballControls(ctx.cameraControls, false)
 }
 
 let handleCubiePointerDown = (ctx: cubeContext, e: ReactThreeFiber.pointerEvent) => {
@@ -531,7 +534,7 @@ let handleCubiePointerDown = (ctx: cubeContext, e: ReactThreeFiber.pointerEvent)
       screenX: nativeEvent.clientX,
       screenY: nativeEvent.clientY,
     })
-    setEnableRotateOrbitControls(ctx.orbitControls, false)
+    setNoRotateTrackballControls(ctx.cameraControls, true)
     ReactThreeFiber.setPointerCapture(event.target, nativeEvent.pointerId)
   } else {
     endGesture(ctx)
@@ -614,10 +617,20 @@ let init = (
   let _ = setVector3(getPosition(dirLight3), -8.0, 12.0, -8.0)
   add(sceneRoot, dirLight3)
 
-  // Orbit Controls attached to canvasElem
-  let controls = createOrbitControls(perspectiveToCamera(camera), canvasElem)
-  setEnableDampingOrbitControls(controls, true)
-  setDampingFactorOrbitControls(controls, 0.05)
+  // Trackball controls attached to canvasElem. Unlike orbiting, these impose no
+  // up-vector, so the cube tumbles freely on every axis instead of stalling at
+  // the poles while spinning without limit horizontally.
+  let controls = createTrackballControls(perspectiveToCamera(camera), canvasElem)
+  setStaticMovingTrackballControls(controls, false)
+  setDynamicDampingFactorTrackballControls(controls, 0.12)
+  setRotateSpeedTrackballControls(controls, 2.4)
+  setZoomSpeedTrackballControls(controls, 1.0)
+  // The cube is the only subject and `fitCameraToCanvas` frames it around the
+  // origin; panning would slide it off-centre and defeat that.
+  setNoPanTrackballControls(controls, true)
+  // Clear the KeyA/KeyS/KeyD modifiers: they are bound on `window` and would
+  // swallow the S and D move shortcuts.
+  setKeysTrackballControls(controls, [])
   lookAtCamera(perspectiveToCamera(camera), 0.0, 0.0, 0.0)
 
   // Group to hold all cubies and core
@@ -671,7 +684,7 @@ let init = (
     camera,
     cubeGroup,
     coreMesh,
-    orbitControls: controls,
+    cameraControls: controls,
     cubies,
     cubieHomes,
     animState,
@@ -695,7 +708,7 @@ let dispose = (ctx: cubeContext) => {
   if ctx.animState.isAnimating {
     remove(ctx.sceneRoot, ctx.animState.pivotGroup)
   }
-  disposeOrbitControls(ctx.orbitControls)
+  disposeTrackballControls(ctx.cameraControls)
   removeScene(ctx.scene, ctx.sceneRoot)
 }
 
