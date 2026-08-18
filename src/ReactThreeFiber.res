@@ -21,6 +21,7 @@ type pointerEventObj = {
   nativeEvent: Dom.event,
   object: mesh,
   face: faceInfo,
+  point: vector3,
   target: pointerEventTarget,
 }
 

@@ -4,8 +4,8 @@ open Three
 open CubeTypes
 
 type dragTarget = {
-  mesh: mesh,
   normal: vector3,
+  point: vector3,
   screenX: float,
   screenY: float,
 }
@@ -420,12 +420,24 @@ let dragToWorld = (ctx: cubeContext, dx: float, dy: float): vector3 => {
   ->addScaledVector3(up, -.dy)
 }
 
-let layerOf = (mesh: mesh, axis: gridAxis): int => {
-  let pos = getPosition(mesh)
+// The center band is intentionally generous. Rounded cubies leave a visible
+// gap at row boundaries, where a ray can nick the adjacent cubie and make a
+// middle-slice gesture turn an outer layer.
+let layerForCoordinate = coordinate => {
+  if coordinate > 0.75 {
+    1
+  } else if coordinate < -0.75 {
+    -1
+  } else {
+    0
+  }
+}
+
+let layerAtPoint = (point: vector3, axis: gridAxis): int => {
   switch axis {
-  | AxisX => roundInt(xVector3(pos))
-  | AxisY => roundInt(yVector3(pos))
-  | AxisZ => roundInt(zVector3(pos))
+  | AxisX => layerForCoordinate(xVector3(point))
+  | AxisY => layerForCoordinate(yVector3(point))
+  | AxisZ => layerForCoordinate(zVector3(point))
   }
 }
 
@@ -436,7 +448,7 @@ let resolveGesture = (ctx: cubeContext, dt: dragTarget, dx: float, dy: float): o
     None
   } else {
     let (axis, signed) = dominantAxis(rotAxis)
-    let m = moveForRotation(axis, layerOf(dt.mesh, axis))
+    let m = moveForRotation(axis, layerAtPoint(dt.point, axis))
     Some(signed >= 0.0 ? m : invertMove(m))
   }
 }
@@ -512,10 +524,10 @@ let handleCubiePointerDown = (ctx: cubeContext, e: ReactThreeFiber.pointerEvent)
   if !ctx.animState.isAnimating && Array.length(ctx.animState.moveQueue) == 0 {
     let targetMesh = event.object
     ctx.dragTarget = Some({
-      mesh: targetMesh,
       normal: cloneVector3(getFaceNormal(event.face))->applyQuaternionVector3(
         getQuaternion(targetMesh),
       ),
+      point: event.point,
       screenX: nativeEvent.clientX,
       screenY: nativeEvent.clientY,
     })
