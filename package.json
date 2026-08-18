@@ -25,16 +25,17 @@
     "bun": ">=1.2.0"
   },
   "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "bun run lint && bun run test && bun run build",
+    "lint": "rescript format --check && rescript",
+    "format": "rescript format",
+    "test": "rescript && bun test ./tests/*_spec.res.mjs",
     "res:build": "rescript",
     "res:clean": "rescript clean",
     "res:dev": "rescript watch",
-    "format": "rescript format",
-    "lint": "rescript format --check && rescript",
-    "dev": "vite",
-    "build": "vite build",
-    "check": "bun run lint && bun run test && bun run build",
-    "test": "rescript && bun test ./tests/*_spec.res.mjs",
-    "preview": "vite preview"
+    "prepare": "lefthook install"
   },
   "dependencies": {
     "@react-three/fiber": "^9.7.0",
@@ -48,9 +49,12 @@
     "three": "^0.185.1"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.2.2",
+    "@commitlint/config-conventional": "^21.2.2",
     "@tailwindcss/vite": "^4.1.12",
     "@types/three": "^0.185.4",
     "@vitejs/plugin-react": "^5.0.2",
+    "lefthook": "^2.1.10",
     "rescript": "12.3.0",
     "tailwindcss": "^4.1.12",
     "vite": "^7.1.0"

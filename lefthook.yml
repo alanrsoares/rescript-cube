@@ -1,0 +1,20 @@
+# Fast checks on the way in, the full gate on the way out.
+pre-commit:
+  parallel: false
+  commands:
+    format:
+      glob: "*.res"
+      run: bunx rescript format {staged_files} && git add {staged_files}
+    compile:
+      glob: "*.res"
+      run: bun run res:build
+
+commit-msg:
+  commands:
+    commitlint:
+      run: bunx commitlint --edit {1}
+
+pre-push:
+  commands:
+    quality-gate:
+      run: bun run check
