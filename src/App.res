@@ -46,10 +46,6 @@ module SolvedBadge = {
   )
 }
 
-module ViewResetSlot = {
-  let make = Tw.div("absolute right-4 top-4 lg:right-6 lg:top-6")
-}
-
 @react.component
 let make = () => {
   let (cubeCtx, setCubeCtx) = React.useState(() => None)
@@ -152,16 +148,7 @@ let make = () => {
     switch cubeCtx {
     | Some(ctx) =>
       restart(ctx)
-      resetView(ctx)
       setTimerState(_ => Idle)
-    | None => ()
-    }
-
-  // Recentre the camera without touching the cube: a bad viewing angle should
-  // not cost the solve in progress.
-  let handleResetView = () =>
-    switch cubeCtx {
-    | Some(ctx) => resetView(ctx)
     | None => ()
     }
 
@@ -210,17 +197,6 @@ let make = () => {
             onContextInit={ctx => setCubeCtx(_ => Some(ctx))}
             onMoveCompleted={handleMoveCompleted}
           />
-          <ViewResetSlot>
-            <Button
-              variant=#ghost
-              btnSize=#icon
-              className="size-8 rounded-md bg-background/60 backdrop-blur-md hover:bg-accent"
-              title="Recentre the view"
-              onClick={_ => handleResetView()}
-            >
-              {Icon.render(Icon.target, ~size=15)}
-            </Button>
-          </ViewResetSlot>
           {isSolved
             ? <SolvedBadge>
                 {Icon.render(Icon.check, ~size=14)}

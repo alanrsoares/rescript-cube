@@ -34,9 +34,6 @@ module CubeScene = {
       switch ctxRef.current {
       | Some(ctx) =>
         fitCameraToCanvas(ctx, r3f.size.width, r3f.size.height)
-        // Level before the controls update so this frame's `lookAt` already
-        // uses the corrected up-vector.
-        levelCameraRoll(ctx, deltaSeconds)
         updateTrackballControls(ctx.cameraControls)
         updateAnimation(ctx, deltaSeconds)
       | None => ()

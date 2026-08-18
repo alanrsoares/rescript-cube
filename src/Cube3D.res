@@ -50,13 +50,6 @@ type cubeContext = {
   mutable activeGesture: option<activeGesture>,
   mutable fittedCanvasWidth: float,
   mutable fittedCanvasHeight: float,
-  canvasElem: Dom.element,
-  // Any pointer held on the canvas suspends auto-levelling, whether it is
-  // turning a face or swinging the camera. Correcting roll under a live finger
-  // would fight the drag.
-  isPointerDown: ref<bool>,
-  onPointerDownCapture: Dom.event => unit,
-  onPointerReleaseCapture: Dom.event => unit,
 }
 
 type rectObj = {
@@ -90,12 +83,6 @@ external castMeshToObj: mesh => meshObj = "%identity"
 external castMeshToSingleMaterialObj: mesh => singleMaterialMeshObj = "%identity"
 external castDomElem: Dom.element => domElemObj = "%identity"
 external castEvtObj: Dom.event => evtObj = "%identity"
-
-@val
-external addWindowEventListener: (string, Dom.event => unit) => unit = "window.addEventListener"
-@val
-external removeWindowEventListener: (string, Dom.event => unit) => unit =
-  "window.removeEventListener"
 
 let pi = Math.Constants.pi
 let turnPixels = 120.0
@@ -473,40 +460,6 @@ let resolveGesture = (ctx: cubeContext, dt: dragTarget, dx: float, dy: float): o
 // and turn simulation derived from those events.
 let dragThresholdPx = 10.0
 
-// Exponential approach rate for auto-levelling, in units per second.
-let levelSpeed = 6.0
-// Below this the view is near enough to a pole that "upright" is undefined, so
-// roll is left alone rather than snapped to an arbitrary choice.
-let levelDeadZone = 0.08
-
-// Free tumbling leaves nothing holding the horizon level, so the cube can be
-// abandoned on its side with no way back. Once every pointer is released, ease
-// `up` toward world +Y projected into the view plane. That corrects roll only —
-// the viewing angle the user chose is preserved, including from below.
-let levelCameraRoll = (ctx: cubeContext, deltaSeconds: float) =>
-  if !ctx.isPointerDown.contents {
-    let cam = perspectiveToCamera(ctx.camera)
-    let viewDirection = cloneVector3(cameraPosition(cam))->normalizeVector3
-    let desired =
-      createVector3(0.0, 1.0, 0.0)->addScaledVector3(
-        viewDirection,
-        -.dotVector3(createVector3(0.0, 1.0, 0.0), viewDirection),
-      )
-    if lengthVector3(desired) >= levelDeadZone {
-      let approach = 1.0 -. Math.exp(-.levelSpeed *. deltaSeconds)
-      let _ = getUp(cam)->lerpVector3(normalizeVector3(desired), approach)->normalizeVector3
-    }
-  }
-
-// Return to the framing the scene opened with. Clearing the fitted size makes
-// `fitCameraToCanvas` re-frame on the next frame, so the reset lands at the
-// right distance for the canvas as it is now, not as it was at startup.
-let resetView = (ctx: cubeContext) => {
-  resetTrackballControls(ctx.cameraControls)
-  ctx.fittedCanvasWidth = 0.0
-  ctx.fittedCanvasHeight = 0.0
-}
-
 let beginGesture = (
   ctx: cubeContext,
   m: move,
@@ -725,14 +678,6 @@ let init = (
     animSpeed: 0.18,
   }
 
-  // A shared ref rather than a record field: the handlers must be built before
-  // the context literal, and closing over the record would capture a copy.
-  // Release is watched on `window` so a drag ending outside the canvas still
-  // clears the flag, otherwise levelling would stay suspended forever.
-  let isPointerDown = ref(false)
-  let onPointerDownCapture = _ => isPointerDown := true
-  let onPointerReleaseCapture = _ => isPointerDown := false
-
   let ctx = {
     scene,
     sceneRoot,
@@ -749,15 +694,7 @@ let init = (
     activeGesture: None,
     fittedCanvasWidth: 0.0,
     fittedCanvasHeight: 0.0,
-    canvasElem,
-    isPointerDown,
-    onPointerDownCapture,
-    onPointerReleaseCapture,
   }
-
-  castDomElem(canvasElem).addEventListener("pointerdown", ctx.onPointerDownCapture)
-  addWindowEventListener("pointerup", ctx.onPointerReleaseCapture)
-  addWindowEventListener("pointercancel", ctx.onPointerReleaseCapture)
 
   ctx
 }
@@ -771,9 +708,6 @@ let dispose = (ctx: cubeContext) => {
   if ctx.animState.isAnimating {
     remove(ctx.sceneRoot, ctx.animState.pivotGroup)
   }
-  castDomElem(ctx.canvasElem).removeEventListener("pointerdown", ctx.onPointerDownCapture)
-  removeWindowEventListener("pointerup", ctx.onPointerReleaseCapture)
-  removeWindowEventListener("pointercancel", ctx.onPointerReleaseCapture)
   disposeTrackballControls(ctx.cameraControls)
   removeScene(ctx.scene, ctx.sceneRoot)
 }
