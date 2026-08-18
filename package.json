@@ -1,0 +1,37 @@
+{
+  "name": "rescript-cube",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "res:build": "rescript",
+    "res:clean": "rescript clean",
+    "res:dev": "rescript watch",
+    "format": "rescript format",
+    "lint": "rescript format --check && rescript",
+    "dev": "vite",
+    "build": "vite build",
+    "check": "bun run lint && bun run test && bun run build",
+    "test": "bun test ./tests/*_spec.res.mjs",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@react-three/fiber": "^9.7.0",
+    "@rescript/react": "^0.14.0",
+    "@styled-cva/react": "^0.7.1",
+    "@styled-cva/rescript": "^0.8.1",
+    "@types/three": "^0.185.4",
+    "canvas-confetti": "^1.9.4",
+    "lucide-react": "^1.31.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "rescript": "12.3.0",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.12",
+    "@vitejs/plugin-react": "^5.0.2",
+    "tailwindcss": "^4.1.12",
+    "vite": "^7.1.0"
+  }
+}

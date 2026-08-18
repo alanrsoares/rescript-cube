@@ -1,0 +1,28 @@
+{
+  "name": "rescript-cube",
+  "sources": [
+    {
+      "dir": "src",
+      "subdirs": true
+    },
+    {
+      "dir": "tests",
+      "subdirs": true
+    }
+  ],
+  "package-specs": [
+    {
+      "module": "esmodule",
+      "in-source": true
+    }
+  ],
+  "suffix": ".res.mjs",
+  "jsx": {
+    "version": 4
+  },
+  "dependencies": [
+    "@rescript/react",
+    "@styled-cva/rescript"
+  ],
+  "compiler-flags": []
+}
