@@ -492,7 +492,7 @@ let snapDuration = 0.28
 // How far the camera is raised off that face normal. Dead-on reads as a flat 2D
 // grid, so the view is lifted just enough to keep a sliver of the neighbouring
 // face, and with it the sense of depth the coach's algorithms rely on.
-let detentTiltDegrees = 20.0
+let detentTiltDegrees = 17.0
 
 let axisDirections = [
   createVector3(1.0, 0.0, 0.0),
