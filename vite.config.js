@@ -4,6 +4,10 @@ import tailwindcss from "@tailwindcss/vite";
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  // GitHub Pages serves this project from /rescript-cube/, so every asset URL
+  // needs that prefix. Applied unconditionally: making it build-only would leave
+  // `vite preview` serving root-relative URLs against a prefixed bundle.
+  base: "/rescript-cube/",
   plugins: [
     tailwindcss(),
     react({
