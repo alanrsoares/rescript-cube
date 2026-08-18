@@ -1,8 +1,29 @@
 {
   "name": "rescript-cube",
-  "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "An interactive 3D Rubik's Cube trainer built in ReScript and Three.js, with a beginner-method coach, practice scrambles, and a speedcubing timer.",
+  "license": "MIT",
+  "author": "Alan R. Soares <alanrsoars@gmail.com>",
+  "homepage": "https://github.com/alanrsoares/rescript-cube#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alanrsoares/rescript-cube.git"
+  },
+  "bugs": {
+    "url": "https://github.com/alanrsoares/rescript-cube/issues"
+  },
+  "keywords": [
+    "rescript",
+    "rubiks-cube",
+    "three.js",
+    "react-three-fiber",
+    "speedcubing",
+    "3d"
+  ],
   "type": "module",
+  "engines": {
+    "bun": ">=1.2.0"
+  },
   "scripts": {
     "res:build": "rescript",
     "res:clean": "rescript clean",
@@ -12,7 +33,7 @@
     "dev": "vite",
     "build": "vite build",
     "check": "bun run lint && bun run test && bun run build",
-    "test": "bun test ./tests/*_spec.res.mjs",
+    "test": "rescript && bun test ./tests/*_spec.res.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -20,17 +41,17 @@
     "@rescript/react": "^0.14.0",
     "@styled-cva/react": "^0.7.1",
     "@styled-cva/rescript": "^0.8.1",
-    "@types/three": "^0.185.4",
     "canvas-confetti": "^1.9.4",
     "lucide-react": "^1.31.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "rescript": "12.3.0",
     "three": "^0.185.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.12",
+    "@types/three": "^0.185.4",
     "@vitejs/plugin-react": "^5.0.2",
+    "rescript": "12.3.0",
     "tailwindcss": "^4.1.12",
     "vite": "^7.1.0"
   }
