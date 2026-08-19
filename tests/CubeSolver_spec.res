@@ -71,6 +71,15 @@ describe("CubeSolver Spec", () => {
         expect(sol)->toEqual([MoveU(Double), MoveR(CounterClockwise)])
       },
     )
+
+    test(
+      "returns a recorded position to solved",
+      () => {
+        let history = [MoveR(Clockwise), MoveU(Double), MoveF(CounterClockwise)]
+        let solved = CubeState.applyMoves(CubeState.fromMoves(history), generateSolution(history))
+        expect(CubeState.isSolved(solved))->toBe(true)
+      },
+    )
   })
 
   describe("Random scramble generator", () => {

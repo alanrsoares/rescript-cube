@@ -923,8 +923,8 @@ let init = (
   addWindowEventListener("pointercancel", ctx.onWindowPointerRelease)
 
   // A two-finger twist turns the touched front face (or rolls the cube elsewhere).
-  // A mostly vertical two-finger swipe instead brings the visible front face up or
-  // down. Both bypass one-finger dragging, which cannot reach the front/back layer.
+  // A two-finger swipe rotates the whole cube toward that screen direction. Both
+  // bypass one-finger dragging, which cannot reach the front/back layer.
   ctx.twist = Some(
     TwistInput.attach(
       canvasElem,
@@ -945,10 +945,10 @@ let init = (
           let frame = viewFrame(ctx)
           let move = switch intent {
           | TwistGesture.Twist(dir) => ctx.twistOnFace ? MoveF(dir) : MoveZ(dir)
-          // A positive X turn drops the front face; reverse it to carry the
-          // visible front face up, matching the direction of the two-finger swipe.
-          | TwistGesture.SwipeUp => MoveX(CounterClockwise)
-          | TwistGesture.SwipeDown => MoveX(Clockwise)
+          | TwistGesture.SwipeUp => MoveX(Clockwise)
+          | TwistGesture.SwipeDown => MoveX(CounterClockwise)
+          | TwistGesture.SwipeLeft => MoveY(Clockwise)
+          | TwistGesture.SwipeRight => MoveY(CounterClockwise)
           }
           queueMove(ctx, ViewFrame.relabel(frame, move))
         },

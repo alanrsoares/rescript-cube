@@ -69,6 +69,9 @@ let make = () => {
   // which stops two undos in one tick from reading the same cursor and replaying
   // the same turn twice.
   let timelineRef = React.useRef(timeline)
+  // Every landed move, including the opening scramble, is retained here so the
+  // history solver can return the cube to its actual current position.
+  let positionHistoryRef = React.useRef(([]: array<move>))
   let initialScrambleRef = React.useRef((None: option<array<move>>))
   let initialScrambleQueuedRef = React.useRef(false)
   let commitTimeline = (next: Timeline.t) => {
@@ -123,6 +126,7 @@ let make = () => {
 
   // The renderer reports each turn once its animation lands; the model follows.
   let handleMoveCompleted = (m: move) => {
+    positionHistoryRef.current = Array.concat(positionHistoryRef.current, [m])
     if replayingRef.current > 0 {
       replayingRef.current = replayingRef.current - 1
     } else {
@@ -217,6 +221,7 @@ let make = () => {
   let restart = (ctx: cubeContext) => {
     resetCube(ctx)
     setCubeState(_ => CubeState.solved())
+    positionHistoryRef.current = []
 
     // `resetCube` drops the queue, so turns still owed to a seek will never land.
     // Forget them, or the next real move would be mistaken for a replay.
@@ -240,6 +245,16 @@ let make = () => {
       restart(ctx)
       setTimerState(_ => Idle)
     | None => ()
+    }
+
+  // The app knows every move that produced the current logical state, including
+  // the opening scramble. Reversing that path is a guaranteed solution without
+  // pretending the fixed beginner-method examples are a general-purpose solver.
+  let handleSolve = () =>
+    switch cubeCtx {
+    | Some(ctx) if !isSolved && replayingRef.current == 0 =>
+      queueMoves(ctx, CubeSolver.generateSolution(positionHistoryRef.current))
+    | _ => ()
     }
 
   // Drill a single stage: solved cube, then a scramble that only disturbs that stage.
@@ -329,7 +344,13 @@ let make = () => {
 
       <section className="flex min-h-0 flex-col gap-3 lg:col-span-5 lg:gap-6">
         <Sheet active={tab == Some(#coach)} onClose={closeTab}>
-          <CoachPanel state={cubeState} onPlay={handleQueue} onPractice={handlePractice} />
+          <CoachPanel
+            state={cubeState}
+            canSolve={!isSolved && replayingRef.current == 0}
+            onSolve={handleSolve}
+            onPlay={handleQueue}
+            onPractice={handlePractice}
+          />
         </Sheet>
         <Sheet active={tab == Some(#log)} onClose={closeTab}>
           <HistoryLog timeline onSeek={handleSeek} />

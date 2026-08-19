@@ -34,6 +34,8 @@ module AlgRow = {
 @react.component
 let make = (
   ~state: CubeState.t,
+  ~canSolve: bool,
+  ~onSolve: unit => unit,
   ~onPlay: array<move> => unit,
   ~onPractice: Method.stage => unit,
 ) => {
@@ -41,21 +43,32 @@ let make = (
 
   <Card.Root className="min-h-0 flex-1 lg:flex-none">
     <Card.Header className="shrink-0">
-      <Card.Title>
-        {Icon.render(Icon.graduationCap)}
-        {renderString("Beginner method")}
-      </Card.Title>
-      <Card.Description>
-        {renderString(
-          switch current {
-          | None => "Solved"
-          | Some(st) =>
-            `Stage ${Int.toString(Method.stages->Array.indexOf(st) + 1)} of ${Int.toString(
-                Array.length(Method.stages),
-              )}`
-          },
-        )}
-      </Card.Description>
+      <div>
+        <Card.Title>
+          {Icon.render(Icon.graduationCap)}
+          {renderString("Beginner method")}
+        </Card.Title>
+        <Card.Description>
+          {renderString(
+            switch current {
+            | None => "Solved"
+            | Some(st) =>
+              `Stage ${Int.toString(Method.stages->Array.indexOf(st) + 1)} of ${Int.toString(
+                  Array.length(Method.stages),
+                )}`
+            },
+          )}
+        </Card.Description>
+      </div>
+      <Button
+        btnSize=#xs
+        disabled={!canSolve}
+        title="Solve the recorded cube position"
+        onClick={_ => onSolve()}
+      >
+        {Icon.render(Icon.wandSparkles, ~size=13)}
+        {renderString("Solve")}
+      </Button>
     </Card.Header>
 
     <ScrollArea className="flex flex-col gap-4 lg:overflow-visible">

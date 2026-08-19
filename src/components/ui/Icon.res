@@ -37,6 +37,7 @@ type t = React.component<props>
 @module("lucide-react") external lightbulb: t = "Lightbulb"
 @module("lucide-react") external graduationCap: t = "GraduationCap"
 @module("lucide-react") external dumbbell: t = "Dumbbell"
+@module("lucide-react") external wandSparkles: t = "WandSparkles"
 
 // Renders a lucide glyph at the surrounding text's cadence.
 let render = (icon: t, ~size=16) =>

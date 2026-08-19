@@ -14,6 +14,8 @@ type intent =
   | Twist(moveDir)
   | SwipeUp
   | SwipeDown
+  | SwipeLeft
+  | SwipeRight
 
 type t = {previous: float, turned: float, startCenter: point}
 
@@ -24,8 +26,8 @@ let pi = Math.Constants.pi
 let commitDegrees = 22.0
 let commitRadians = commitDegrees *. pi /. 180.0
 
-// A two-finger swipe needs more travel than a twist needs rotation. Requiring the
-// vertical component to dominate preserves ordinary pinches and diagonal settles.
+// A two-finger swipe needs more travel than a twist needs rotation. Requiring one
+// screen axis to dominate preserves ordinary pinches and diagonal settles.
 let swipeCommitPx = 40.0
 
 let angleOf = (a: point, b: point): float => Math.atan2(~y=b.y -. a.y, ~x=b.x -. a.x)
@@ -72,6 +74,8 @@ let intent = (t: t, a: point, b: point): option<intent> => {
   let dy = center.y -. t.startCenter.y
   if Math.abs(dy) >= swipeCommitPx && Math.abs(dy) > Math.abs(dx) {
     Some(dy < 0.0 ? SwipeUp : SwipeDown)
+  } else if Math.abs(dx) >= swipeCommitPx && Math.abs(dx) > Math.abs(dy) {
+    Some(dx < 0.0 ? SwipeLeft : SwipeRight)
   } else {
     switch direction(t) {
     | Some(dir) => Some(Twist(dir))
