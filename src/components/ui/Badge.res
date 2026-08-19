@@ -20,7 +20,7 @@ type props = {
 }
 
 let make: React.component<props> = Tw.spanWithConfig(
-  "inline-flex select-none items-center gap-1.5 rounded-md border px-2 py-0.5 font-mono text-xs font-medium transition-colors",
+  "plastic-chip inline-flex select-none items-center gap-1.5 rounded-md border px-2 py-0.5 font-mono text-xs font-medium transition-colors",
   {
     "variants": {
       "$variant": {

@@ -1,32 +1,65 @@
 @import "tailwindcss";
 
-/* shadcn/ui design tokens (Tailwind v4). Dark is the default surface. */
+/* Design tokens.
+ *
+ * The cube is glossy ABS: roughness 0.18, metalness 0.08, moulded on a near-black
+ * 0x18181c core, lit hard from the upper right. The chrome is that same plastic
+ * with the pigment left out, so every neutral is tinted toward the core's cool
+ * hue rather than sitting at chroma 0, and the only saturated things on screen
+ * are the cube and the three semantic states.
+ *
+ * Dark, deliberately: practice runs are twenty minutes of staring at a lit,
+ * saturated cube at a desk in the evening. A light surround would compete with
+ * the one object that has to read instantly.
+ */
+
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
   --radius: 0.75rem;
 
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.585 0.233 277);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.637 0.237 25.331);
-  --destructive-foreground: oklch(0.985 0 0);
+  /* Plastic hue. Every neutral below carries a trace of it. */
+  --plastic-hue: 285;
+
+  --background: oklch(0.168 0.006 285);
+  --foreground: oklch(0.968 0.003 285);
+  --card: oklch(0.216 0.007 285);
+  --card-foreground: oklch(0.968 0.003 285);
+  --popover: oklch(0.236 0.008 285);
+  --popover-foreground: oklch(0.968 0.003 285);
+  /* The primary action is a light moulded keycap, not a coloured chip. */
+  --primary: oklch(0.955 0.004 285);
+  --primary-foreground: oklch(0.185 0.008 285);
+  --secondary: oklch(0.315 0.009 285);
+  --secondary-foreground: oklch(0.968 0.003 285);
+  --muted: oklch(0.262 0.007 285);
+  --muted-foreground: oklch(0.702 0.012 285);
+  --accent: oklch(0.365 0.011 285);
+  --accent-foreground: oklch(0.968 0.003 285);
+  --destructive: oklch(0.637 0.213 25.3);
+  --destructive-foreground: oklch(0.985 0.002 285);
   --success: oklch(0.696 0.17 162.48);
   --warning: oklch(0.769 0.188 70.08);
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.585 0.233 277);
+  --border: oklch(1 0 0 / 9%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.82 0.012 285);
+
+  /* Moulded plastic, three parts.
+   *
+   * `--rim` is the lit top edge of the moulding. `--sheen` is the fall-off down
+   * the face, which is what separates plastic from flat paint. `--shadow-tile`
+   * is tight and close: a key sits on the panel, it does not float above it. A
+   * wide soft halo would read as glass.
+   */
+  --rim: inset 0 1px 0 oklch(1 0 0 / 0.1);
+  --rim-soft: inset 0 1px 0 oklch(1 0 0 / 0.055);
+  --sheen: linear-gradient(180deg, oklch(1 0 0 / 0.06), oklch(1 0 0 / 0) 58%);
+  --sheen-soft: linear-gradient(180deg, oklch(1 0 0 / 0.03), oklch(1 0 0 / 0) 62%);
+  --shadow-tile: 0 1px 1px oklch(0 0 0 / 0.5), 0 2px 4px -1px oklch(0 0 0 / 0.32);
+  --shadow-panel: 0 1px 2px oklch(0 0 0 / 0.4), 0 8px 20px -12px oklch(0 0 0 / 0.5);
+
+  /* The cube's own turn easing, so the chrome decelerates like the cube does. */
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @theme inline {
@@ -58,6 +91,41 @@
   --radius-xl: calc(var(--radius) + 4px);
 
   --font-sans: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+
+  --ease-plastic: var(--ease-out-quint);
+}
+
+/* A moulded key: lit top edge, sheen down the face, tight shadow underneath. */
+@utility plastic {
+  background-image: var(--sheen);
+  box-shadow: var(--rim), var(--shadow-tile);
+}
+
+/* The same moulding at panel scale, where the sheen has to stay quiet across a
+ * much taller face or it turns into a visible band. */
+@utility plastic-panel {
+  background-image: var(--sheen-soft);
+  box-shadow: var(--rim-soft), var(--shadow-panel);
+}
+
+/* A well cut into the plastic: the canvas and the log read as recesses, so the
+ * lighting inverts and the shadow falls from the top lip inward. */
+@utility plastic-well {
+  box-shadow: inset 0 1px 3px oklch(0 0 0 / 0.45), inset 0 -1px 0 oklch(1 0 0 / 0.045);
+}
+
+/* A sticker: lit top edge, flat against what it sits on, so it never competes
+ * with the keys around it. */
+@utility plastic-chip {
+  box-shadow: var(--rim-soft);
+}
+
+/* Pressing a key drops it into its own shadow. Travel is 1px because that is
+ * what a keycap actually moves; more reads as a bug. */
+@utility plastic-press {
+  translate: 0 1px;
+  background-image: none;
+  box-shadow: inset 0 1px 2px oklch(0 0 0 / 0.35);
 }
 
 @layer base {

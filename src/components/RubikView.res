@@ -95,7 +95,7 @@ let make = (
   let (state, setState) = React.useState(() => None)
 
   <div
-    className="relative h-full min-h-[180px] w-full cursor-grab select-none overflow-hidden rounded-lg border touch-none active:cursor-grabbing lg:min-h-[420px]"
+    className="plastic-well relative h-full min-h-[180px] w-full cursor-grab select-none overflow-hidden rounded-lg border bg-background touch-none active:cursor-grabbing lg:min-h-[420px]"
   >
     <ReactThreeFiber.canvas onCreated={created => setState(_ => Some(created))}>
       {switch state {

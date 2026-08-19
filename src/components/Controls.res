@@ -10,7 +10,7 @@ module SectionLabel = {
 }
 
 module Group = {
-  let make = Tw.div("flex items-center gap-1 rounded-md border bg-background/60 p-1")
+  let make = Tw.div("plastic-well flex items-center gap-1 rounded-md border bg-background p-1")
 }
 
 // Fingers are wider than cursors: the grid keeps six columns but grows the rows
