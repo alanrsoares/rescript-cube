@@ -562,20 +562,35 @@ let nearestAxis = (candidates: array<vector3>, target: vector3): vector3 =>
 let squareUpCandidates = (direction: vector3): array<vector3> =>
   axisDirections->Array.filter(axis => Math.abs(dotVector3(axis, direction)) < 0.5)
 
-// Which side of the face's equator the drag finished on. Ties resolve upward,
-// so a dead-level release still settles the way it always did.
-let detentTiltSign = (direction: vector3, up: vector3): float =>
-  dotVector3(direction, up) < 0.0 ? -1.0 : 1.0
+// Each camera screen axis has three detents: negative, square-on, and positive.
+// The middle band is half the outer tilt wide, making deliberate offsets easy
+// while a near-level release lands on the straight-on view.
+let detentCenterBand = Math.sin(detentTiltDegrees *. pi /. 360.0)
 
-// The resting direction for a face: its normal, lifted off it along `up`. The
-// sign follows the hemisphere the drag ended in, so a view from below keeps
-// looking up and shows the sliver of the bottom face rather than snapping over
-// the equator to reveal the top one.
-let detentDirection = (faceNormal: vector3, up: vector3, tiltSign: float): vector3 => {
-  let tilt = detentTiltDegrees *. pi /. 180.0
+let detentOffset = (direction: vector3, axis: vector3): float => {
+  let component = dotVector3(direction, axis)
+  if component > detentCenterBand {
+    1.0
+  } else if component < -.detentCenterBand {
+    -1.0
+  } else {
+    0.0
+  }
+}
+
+// The resting direction for a face: its normal, offset along either screen axis.
+// One helper owns both dimensions, yielding a 3×3 grid around every face.
+let detentDirection = (
+  faceNormal: vector3,
+  up: vector3,
+  right: vector3,
+  vertical: float,
+  horizontal: float,
+): vector3 => {
+  let tilt = Math.tan(detentTiltDegrees *. pi /. 180.0)
   cloneVector3(faceNormal)
-  ->multiplyScalarVector3(Math.cos(tilt))
-  ->addScaledVector3(up, tiltSign *. Math.sin(tilt))
+  ->addScaledVector3(up, vertical *. tilt)
+  ->addScaledVector3(right, horizontal *. tilt)
   ->normalizeVector3
 }
 
@@ -616,10 +631,17 @@ let beginCameraSnap = (ctx: cubeContext) => {
     // Chosen from the current up rather than forced to world +Y, so a view that
     // tumbled over the top stays inverted instead of rolling back.
     let targetUp = nearestAxis(squareUpCandidates(faceNormal), currentUp)
+    let targetRight = cloneVector3(targetUp)->crossVector3(faceNormal)
     ctx.cameraSnap = Some({
       startDirection: direction,
       startUp: currentUp,
-      targetDirection: detentDirection(faceNormal, targetUp, detentTiltSign(direction, targetUp)),
+      targetDirection: detentDirection(
+        faceNormal,
+        targetUp,
+        targetRight,
+        detentOffset(direction, targetUp),
+        detentOffset(direction, targetRight),
+      ),
       targetUp,
       distance,
       elapsed: 0.0,
@@ -788,7 +810,13 @@ let init = (
   // Start on a detent, so the opening framing matches every position the camera
   // settles into afterwards. Only the direction matters: `fitCameraToCanvas`
   // sets the distance.
-  let home = detentDirection(createVector3(0.0, 0.0, 1.0), createVector3(0.0, 1.0, 0.0), 1.0)
+  let home = detentDirection(
+    createVector3(0.0, 0.0, 1.0),
+    createVector3(0.0, 1.0, 0.0),
+    createVector3(1.0, 0.0, 0.0),
+    1.0,
+    0.0,
+  )
   let _ = setVector3(
     cameraPosition(perspectiveToCamera(camera)),
     xVector3(home),
