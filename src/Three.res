@@ -134,6 +134,8 @@ external createTrackballControls: (camera, Dom.element) => trackballControls = "
 @set external setStaticMovingTrackballControls: (trackballControls, bool) => unit = "staticMoving"
 @set external setRotateSpeedTrackballControls: (trackballControls, float) => unit = "rotateSpeed"
 @set external setZoomSpeedTrackballControls: (trackballControls, float) => unit = "zoomSpeed"
+// Two fingers are the trackball's zoom gesture, so it has to yield during a twist.
+@set external setNoZoomTrackballControls: (trackballControls, bool) => unit = "noZoom"
 @set external setMinDistanceTrackballControls: (trackballControls, float) => unit = "minDistance"
 @set external setMaxDistanceTrackballControls: (trackballControls, float) => unit = "maxDistance"
 // Defaults to ["KeyA", "KeyS", "KeyD"] on `window`, which would swallow the
