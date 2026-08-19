@@ -18,6 +18,8 @@ type activeGesture = {
   directionY: float,
 }
 
+type twistTarget = FaceTwist | WholeCubeTwist
+
 type animationState = {
   mutable isAnimating: bool,
   mutable currentMove: option<move>,
@@ -67,6 +69,7 @@ type cubeContext = {
   mutable onCanvasPointerDown: Dom.event => unit,
   mutable onWindowPointerRelease: Dom.event => unit,
   mutable twist: option<TwistInput.t>,
+  mutable twistTarget: option<twistTarget>,
 }
 
 type rectObj = {
@@ -702,8 +705,9 @@ let beginGesture = (
   })
 }
 
-// A two-finger rotation maps directly onto one face quarter-turn. The same
-// progress scale drives every frame, then `settleGesture` finishes or rewinds it.
+// A two-finger rotation maps directly onto a face or whole-cube quarter-turn.
+// The same progress scale drives every frame, then `settleGesture` finishes or
+// rewinds it.
 let twistProgress = (turned: float): float => clamp(Math.abs(turned) /. (pi /. 2.0), 0.0, 1.0)
 
 let rec updateTwistGesture = (ctx: cubeContext, twist: TwistGesture.t) => {
@@ -711,9 +715,16 @@ let rec updateTwistGesture = (ctx: cubeContext, twist: TwistGesture.t) => {
   | None =>
     switch TwistGesture.direction(twist) {
     | Some(dir) =>
-      let move = ViewFrame.relabel(viewFrame(ctx), MoveF(dir))
-      beginGesture(ctx, move, 0.0, 0.0, 1.0, 0.0)
-      updateTwistGesture(ctx, twist)
+      switch ctx.twistTarget {
+      | Some(target) =>
+        let localMove = switch target {
+        | FaceTwist => MoveF(dir)
+        | WholeCubeTwist => MoveZ(dir)
+        }
+        beginGesture(ctx, ViewFrame.relabel(viewFrame(ctx), localMove), 0.0, 0.0, 1.0, 0.0)
+        updateTwistGesture(ctx, twist)
+      | None => ()
+      }
     | None => ()
     }
   | Some(_) =>
@@ -993,6 +1004,7 @@ let init = (
     onCanvasPointerDown: _ => (),
     onWindowPointerRelease: _ => (),
     twist: None,
+    twistTarget: None,
   }
 
   // Assigned after construction rather than through a spread: a closure built
@@ -1006,8 +1018,8 @@ let init = (
   addWindowEventListener("pointerup", ctx.onWindowPointerRelease)
   addWindowEventListener("pointercancel", ctx.onWindowPointerRelease)
 
-  // A two-finger twist scrubs the front face continuously. It is intentionally
-  // face-only: camera detents now cover reorienting the whole cube.
+  // A two-finger twist on the visible face scrubs that face; one on the outer
+  // canvas scrubs a whole-cube roll. Both use the same continuous pivot path.
   ctx.twist = Some(
     TwistInput.attach(
       canvasElem,
@@ -1015,17 +1027,19 @@ let init = (
         if ctx.animState.isAnimating || Array.length(ctx.animState.moveQueue) > 0 {
           false
         } else {
-          switch ctx.dragTarget {
-          | None => false
-          | Some(_) =>
-            cancelSliceGesture(ctx)
+          ctx.twistTarget = Some(
+            switch ctx.dragTarget {
+            | Some(_) => FaceTwist
+            | None => WholeCubeTwist
+            },
+          )
+          cancelSliceGesture(ctx)
 
-            // The two-finger gesture owns the canvas until both pointers release,
-            // and the trackball's own zoom must yield for that interval.
-            setNoZoomTrackballControls(controls, true)
-            setNoRotateTrackballControls(controls, true)
-            true
-          }
+          // The two-finger gesture owns the canvas until both pointers release,
+          // and the trackball's own zoom must yield for that interval.
+          setNoZoomTrackballControls(controls, true)
+          setNoRotateTrackballControls(controls, true)
+          true
         },
       ~onUpdate=twist => updateTwistGesture(ctx, twist),
       ~onEnd=() => {
@@ -1035,6 +1049,7 @@ let init = (
           settleGesture(ctx, progress >= commitTurnAt)
         | None => ()
         }
+        ctx.twistTarget = None
         setNoZoomTrackballControls(controls, false)
         setNoRotateTrackballControls(controls, false)
       },
