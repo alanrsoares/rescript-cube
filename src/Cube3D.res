@@ -53,6 +53,7 @@ type cubeContext = {
   coreMesh: mesh,
   cameraControls: trackballControls,
   cubies: array<mesh>,
+  faceHighlights: array<mesh>,
   cubieHomes: array<(int, int, int)>,
   animState: animationState,
   mutable materials: array<material>,
@@ -65,6 +66,10 @@ type cubeContext = {
   mutable cameraSnap: option<cameraSnap>,
   mutable onCanvasPointerDown: Dom.event => unit,
   mutable onWindowPointerRelease: Dom.event => unit,
+  mutable twist: option<TwistInput.t>,
+  // Whether the twist under way began on the face in front of the learner, which
+  // is what separates turning that face from rolling the whole cube.
+  mutable twistOnFace: bool,
 }
 
 type rectObj = {
@@ -225,6 +230,48 @@ let updateThemeColors = (ctx: cubeContext, newTheme: themeName) => {
     let mo = castMeshToObj(mesh)
     mo.material = mats
   })
+}
+
+// A translucent cap sits just above each outer layer. It is a renderer-only
+// affordance: the hover preview never reads or changes the logical cube state.
+let createFaceHighlights = (): array<mesh> => {
+  let material = createMeshBasicMaterial({color: 0xffffff, transparent: true, opacity: 0.16})
+  let make = (width, height, depth, x, y, z) => {
+    let geometry = geometryFromRoundedBox(createRoundedBoxGeometry(width, height, depth, 2, 0.04))
+    let highlight = createMesh(geometry, material)
+    let _ = setVector3(getPosition(highlight), x, y, z)
+    setVisible(highlight, false)
+    highlight
+  }
+
+  [
+    make(2.94, 0.03, 2.94, 0.0, 1.5, 0.0), // U
+    make(2.94, 0.03, 2.94, 0.0, -1.5, 0.0), // D
+    make(0.03, 2.94, 2.94, -1.5, 0.0, 0.0), // L
+    make(0.03, 2.94, 2.94, 1.5, 0.0, 0.0), // R
+    make(2.94, 2.94, 0.03, 0.0, 0.0, 1.5), // F
+    make(2.94, 2.94, 0.03, 0.0, 0.0, -1.5), // B
+  ]
+}
+
+let clearFaceHighlight = (ctx: cubeContext) =>
+  ctx.faceHighlights->Array.forEach(highlight => setVisible(highlight, false))
+
+let showFaceHighlight = (ctx: cubeContext, m: move) => {
+  let index = switch m {
+  | MoveU(_) => Some(0)
+  | MoveD(_) => Some(1)
+  | MoveL(_) => Some(2)
+  | MoveR(_) => Some(3)
+  | MoveF(_) => Some(4)
+  | MoveB(_) => Some(5)
+  | MoveM(_) | MoveE(_) | MoveS(_) | MoveX(_) | MoveY(_) | MoveZ(_) => None
+  }
+  clearFaceHighlight(ctx)
+  switch index {
+  | Some(i) => setVisible(ctx.faceHighlights->Array.getUnsafe(i), true)
+  | None => ()
+  }
 }
 
 // Select matching cubies for a move
@@ -515,14 +562,48 @@ let nearestAxis = (candidates: array<vector3>, target: vector3): vector3 =>
 let squareUpCandidates = (direction: vector3): array<vector3> =>
   axisDirections->Array.filter(axis => Math.abs(dotVector3(axis, direction)) < 0.5)
 
-// The resting direction for a face: its normal, raised toward the chosen up.
-let detentDirection = (faceNormal: vector3, up: vector3): vector3 => {
+// Which side of the face's equator the drag finished on. Ties resolve upward,
+// so a dead-level release still settles the way it always did.
+let detentTiltSign = (direction: vector3, up: vector3): float =>
+  dotVector3(direction, up) < 0.0 ? -1.0 : 1.0
+
+// The resting direction for a face: its normal, lifted off it along `up`. The
+// sign follows the hemisphere the drag ended in, so a view from below keeps
+// looking up and shows the sliver of the bottom face rather than snapping over
+// the equator to reveal the top one.
+let detentDirection = (faceNormal: vector3, up: vector3, tiltSign: float): vector3 => {
   let tilt = detentTiltDegrees *. pi /. 180.0
   cloneVector3(faceNormal)
   ->multiplyScalarVector3(Math.cos(tilt))
-  ->addScaledVector3(up, Math.sin(tilt))
+  ->addScaledVector3(up, tiltSign *. Math.sin(tilt))
   ->normalizeVector3
 }
+
+// The frame the learner is looking from, read off the camera's own basis. Typed
+// notation is relative to this; the model is in world axes.
+let viewFrame = (ctx: cubeContext): ViewFrame.t => {
+  let cam = perspectiveToCamera(ctx.camera)
+  updateMatrixWorld(cam, true)
+  let m = getMatrixWorld(cam)
+  let right = createVector3Zero()->setFromMatrixColumn(m, 0)
+  let up = createVector3Zero()->setFromMatrixColumn(m, 1)
+  let triple = v => (xVector3(v), yVector3(v), zVector3(v))
+  ViewFrame.fromCamera(~right=triple(right), ~up=triple(up))
+}
+
+// The face squarely in front of the learner.
+let cameraFacingAxis = (ctx: cubeContext): vector3 => {
+  let direction = cloneVector3(cameraPosition(perspectiveToCamera(ctx.camera)))->normalizeVector3
+  nearestAxis(axisDirections, direction)
+}
+
+// A drag only drives a turn when it starts on that face. The detent leaves a
+// 17-degree sliver of two neighbours on screen, and a drag along one of those
+// used to resolve to whatever layer sat under the finger: sliding sideways along
+// the top edge turned the back layer or the middle slice, neither of which the
+// learner can see move. Those drags orbit the camera instead.
+let faceTowardCamera = (ctx: cubeContext, normal: vector3): bool =>
+  dotVector3(cameraFacingAxis(ctx), normal) > 0.5
 
 let beginCameraSnap = (ctx: cubeContext) => {
   let cam = perspectiveToCamera(ctx.camera)
@@ -538,7 +619,7 @@ let beginCameraSnap = (ctx: cubeContext) => {
     ctx.cameraSnap = Some({
       startDirection: direction,
       startUp: currentUp,
-      targetDirection: detentDirection(faceNormal, targetUp),
+      targetDirection: detentDirection(faceNormal, targetUp, detentTiltSign(direction, targetUp)),
       targetUp,
       distance,
       elapsed: 0.0,
@@ -636,16 +717,18 @@ let handleCubiePointerDown = (ctx: cubeContext, e: ReactThreeFiber.pointerEvent)
   let nativeEvent = castEvtObj(event.nativeEvent)
   if !ctx.animState.isAnimating && Array.length(ctx.animState.moveQueue) == 0 {
     let targetMesh = event.object
-    ctx.dragTarget = Some({
-      normal: cloneVector3(getFaceNormal(event.face))->applyQuaternionVector3(
-        getQuaternion(targetMesh),
-      ),
-      point: event.point,
-      screenX: nativeEvent.clientX,
-      screenY: nativeEvent.clientY,
-    })
-    setNoRotateTrackballControls(ctx.cameraControls, true)
-    ReactThreeFiber.setPointerCapture(event.target, nativeEvent.pointerId)
+    let normal =
+      cloneVector3(getFaceNormal(event.face))->applyQuaternionVector3(getQuaternion(targetMesh))
+    if faceTowardCamera(ctx, normal) {
+      ctx.dragTarget = Some({
+        normal,
+        point: event.point,
+        screenX: nativeEvent.clientX,
+        screenY: nativeEvent.clientY,
+      })
+      setNoRotateTrackballControls(ctx.cameraControls, true)
+      ReactThreeFiber.setPointerCapture(event.target, nativeEvent.pointerId)
+    }
   } else {
     endGesture(ctx)
   }
@@ -705,7 +788,7 @@ let init = (
   // Start on a detent, so the opening framing matches every position the camera
   // settles into afterwards. Only the direction matters: `fitCameraToCanvas`
   // sets the distance.
-  let home = detentDirection(createVector3(0.0, 0.0, 1.0), createVector3(0.0, 1.0, 0.0))
+  let home = detentDirection(createVector3(0.0, 0.0, 1.0), createVector3(0.0, 1.0, 0.0), 1.0)
   let _ = setVector3(
     cameraPosition(perspectiveToCamera(camera)),
     xVector3(home),
@@ -784,6 +867,9 @@ let init = (
     }
   }
 
+  let faceHighlights = createFaceHighlights()
+  faceHighlights->Array.forEach(highlight => add(cubeGroup, highlight))
+
   let animState = {
     isAnimating: false,
     currentMove: None,
@@ -808,6 +894,7 @@ let init = (
     coreMesh,
     cameraControls: controls,
     cubies,
+    faceHighlights,
     cubieHomes,
     animState,
     materials,
@@ -820,6 +907,8 @@ let init = (
     cameraSnap: None,
     onCanvasPointerDown: _ => (),
     onWindowPointerRelease: _ => (),
+    twist: None,
+    twistOnFace: false,
   }
 
   // Assigned after construction rather than through a spread: a closure built
@@ -833,6 +922,36 @@ let init = (
   addWindowEventListener("pointerup", ctx.onWindowPointerRelease)
   addWindowEventListener("pointercancel", ctx.onWindowPointerRelease)
 
+  // Two fingers twisting: on the face in front of the learner it turns that face,
+  // anywhere else it rolls the whole cube. It is also the only gesture that reaches
+  // the front and back layers, which `faceTowardCamera` keeps a one-finger drag off.
+  ctx.twist = Some(
+    TwistInput.attach(
+      canvasElem,
+      ~onBegin=() => {
+        ctx.twistOnFace = switch ctx.dragTarget {
+        | Some(_) => true
+        | None => false
+        }
+
+        // The twist supersedes the one-finger drag that started it, and the
+        // trackball's own two-finger zoom would otherwise fight it.
+        ctx.dragTarget = None
+        setNoZoomTrackballControls(controls, true)
+        setNoRotateTrackballControls(controls, true)
+      },
+      ~onCommit=dir =>
+        if !ctx.animState.isAnimating && Array.length(ctx.animState.moveQueue) == 0 {
+          let frame = viewFrame(ctx)
+          queueMove(ctx, ViewFrame.relabel(frame, ctx.twistOnFace ? MoveF(dir) : MoveZ(dir)))
+        },
+      ~onEnd=() => {
+        setNoZoomTrackballControls(controls, false)
+        setNoRotateTrackballControls(controls, false)
+      },
+    ),
+  )
+
   ctx
 }
 
@@ -845,6 +964,11 @@ let dispose = (ctx: cubeContext) => {
   if ctx.animState.isAnimating {
     remove(ctx.sceneRoot, ctx.animState.pivotGroup)
   }
+  switch ctx.twist {
+  | Some(twist) => TwistInput.detach(twist)
+  | None => ()
+  }
+  ctx.twist = None
   castDomElem(ctx.canvasElem).removeEventListener("pointerdown", ctx.onCanvasPointerDown)
   removeWindowEventListener("pointerup", ctx.onWindowPointerRelease)
   removeWindowEventListener("pointercancel", ctx.onWindowPointerRelease)

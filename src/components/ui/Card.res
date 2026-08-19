@@ -4,7 +4,7 @@ open StyledCva
 
 module Root = {
   let make = Tw.div(
-    "flex flex-col gap-4 rounded-xl border bg-card p-5 text-card-foreground shadow-sm",
+    "plastic-panel flex flex-col gap-4 rounded-xl border bg-card p-5 text-card-foreground",
   )
 }
 

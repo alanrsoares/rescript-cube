@@ -25,10 +25,21 @@ module CubeScene = {
       ctx.animState.animSpeed = animSpeed
       ctxRef.current = Some(ctx)
       setCtx(_ => Some(ctx))
-      onContextInit(ctx)
 
       Some(() => Cube3D.dispose(ctx))
     }, [])
+
+    // The context is useful to the app only after React has mounted its
+    // primitive cubies. Callers may establish an initial position immediately,
+    // and doing that before this commit lets the mount put those meshes back in
+    // their solved arrangement.
+    React.useEffect(() => {
+      switch ctx {
+      | Some(ctx) => onContextInit(ctx)
+      | None => ()
+      }
+      None
+    }, [ctx])
 
     ReactThreeFiber.useFrame((_, deltaSeconds) =>
       switch ctxRef.current {
@@ -95,7 +106,7 @@ let make = (
   let (state, setState) = React.useState(() => None)
 
   <div
-    className="relative h-full min-h-[180px] w-full cursor-grab select-none overflow-hidden rounded-lg border touch-none active:cursor-grabbing lg:min-h-[420px]"
+    className="plastic-well relative h-full min-h-[180px] w-full cursor-grab select-none overflow-hidden rounded-lg border bg-background touch-none active:cursor-grabbing lg:min-h-[420px]"
   >
     <ReactThreeFiber.canvas onCreated={created => setState(_ => Some(created))}>
       {switch state {

@@ -3,15 +3,18 @@
 open StyledCva
 open Utils
 
+// Identity left, run state right. The status pill used to sit in its own centre
+// column, which left it floating in dead space on a wide header; it belongs next
+// to the record it is about to beat.
 module HeaderContainer = {
   let make = Tw.header(
-    "mb-3 grid w-full max-w-6xl shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 border-b border-border/70 pb-3 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:mb-6 lg:pb-4",
+    "mb-3 flex w-full max-w-6xl shrink-0 items-center justify-between gap-3 border-b border-border/70 pb-3 lg:mb-6 lg:pb-4",
   )
 }
 
 module LogoIcon = {
   let make = Tw.div(
-    "flex size-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-card p-1 shadow-sm lg:size-11",
+    "plastic flex size-10 shrink-0 items-center justify-center rounded-xl border bg-card p-1 lg:size-11",
   )
 }
 
@@ -26,11 +29,11 @@ module Eyebrow = {
 }
 
 module StatusRegion = {
-  let make = Tw.div("justify-self-end md:justify-self-center")
+  let make = Tw.div("shrink-0")
 }
 
 module RecordCard = {
-  let make = Tw.div("hidden min-w-[76px] flex-col items-end border-l border-border/70 pl-3 sm:flex")
+  let make = Tw.div("hidden min-w-[76px] flex-col items-end sm:flex")
 }
 
 module RecordLabel = {
@@ -61,30 +64,35 @@ let make = (
       </div>
     </div>
 
-    <StatusRegion ariaLive=#polite>
-      {switch timerState {
-      | Inspecting(secs) =>
-        <Badge variant=#warning className="px-2.5 py-1">
-          {Icon.render(Icon.eye, ~size=12)}
-          <span className="hidden sm:inline"> {renderString("Inspect")} </span>
-          <span className="tabular-nums"> {renderString(Int.toString(secs) ++ "s")} </span>
-        </Badge>
-      | Running(_) =>
-        <Badge variant=#success className="px-2.5 py-1">
-          {Icon.render(Icon.timer, ~size=12)}
-          <span className="text-sm tabular-nums"> {renderString(Timer.formatTime(timerMs))} </span>
-        </Badge>
-      | Solved(ms) =>
-        <Badge variant=#default className="px-2.5 py-1">
-          {Icon.render(Icon.partyPopper, ~size=12)}
-          <span className="hidden sm:inline"> {renderString("Solved")} </span>
-          <span className="tabular-nums"> {renderString(Timer.formatTime(ms))} </span>
-        </Badge>
-      | Idle => <Badge variant=#secondary className="px-2.5 py-1"> {renderString("Ready")} </Badge>
-      }}
-    </StatusRegion>
+    <div className="flex shrink-0 items-center gap-3 lg:gap-4">
+      <StatusRegion ariaLive=#polite>
+        {switch timerState {
+        | Inspecting(secs) =>
+          <Badge variant=#warning className="px-2.5 py-1">
+            {Icon.render(Icon.eye, ~size=12)}
+            <span className="hidden sm:inline"> {renderString("Inspect")} </span>
+            <span className="tabular-nums"> {renderString(Int.toString(secs) ++ "s")} </span>
+          </Badge>
+        | Running(_) =>
+          <Badge variant=#success className="px-2.5 py-1">
+            {Icon.render(Icon.timer, ~size=12)}
+            <span className="text-sm tabular-nums">
+              {renderString(Timer.formatTime(timerMs))}
+            </span>
+          </Badge>
+        | Solved(ms) =>
+          <Badge variant=#default className="px-2.5 py-1">
+            {Icon.render(Icon.partyPopper, ~size=12)}
+            <span className="hidden sm:inline"> {renderString("Solved")} </span>
+            <span className="tabular-nums"> {renderString(Timer.formatTime(ms))} </span>
+          </Badge>
+        | Idle =>
+          <Badge variant=#secondary className="px-2.5 py-1"> {renderString("Ready")} </Badge>
+        }}
+      </StatusRegion>
 
-    <div className="hidden items-center justify-self-end gap-3 md:flex">
+      <div className="hidden h-8 w-px shrink-0 bg-border sm:block" />
+
       <RecordCard>
         <RecordLabel>
           {Icon.render(Icon.trophy, ~size=10)}

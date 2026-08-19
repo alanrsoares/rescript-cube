@@ -29,7 +29,7 @@ module Tab = {
     {
       "variants": {
         "$active": {
-          "on": "bg-primary/10 text-primary",
+          "on": "plastic-well bg-accent text-foreground",
           "off": "text-muted-foreground",
         },
       },

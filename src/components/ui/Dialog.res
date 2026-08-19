@@ -18,7 +18,7 @@ module NativeDialog = {
   }
 
   let make = (Tw.dialog(
-    "m-auto w-[calc(100%-2rem)] max-w-md border border-border bg-popover p-0 text-popover-foreground shadow-2xl outline-none backdrop:bg-background/80 backdrop:backdrop-blur-sm",
+    "plastic-panel m-auto w-[calc(100%-2rem)] max-w-md rounded-xl border border-border bg-popover p-0 text-popover-foreground outline-none backdrop:bg-background/85",
   ) :> React.component<props>)
 }
 
