@@ -58,7 +58,7 @@ describe("TwistGesture", () => {
 
   test("classifies a two-finger upward translation as a vertical face flip", () => {
     expect(swipeTo(0.0, -30.0)->TwistGesture.interaction)->toEqual(
-      Some(TwistGesture.Swipe(Vertical, CounterClockwise)),
+      Some(TwistGesture.Swipe(Vertical, Clockwise)),
     )
   })
 

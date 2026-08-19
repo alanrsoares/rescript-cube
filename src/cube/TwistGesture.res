@@ -77,9 +77,9 @@ let interaction = (t: t): option<interaction> =>
       if Math.abs(dx) >= swipeThresholdPx && Math.abs(dx) >= Math.abs(dy) {
         Some(Swipe(Horizontal, dx > 0.0 ? Clockwise : CounterClockwise))
       } else if Math.abs(dy) >= swipeThresholdPx {
-        // Screen y points down. Counter-clockwise here makes an upward swipe
-        // carry the visible front face upward.
-        Some(Swipe(Vertical, dy > 0.0 ? Clockwise : CounterClockwise))
+        // Screen y points down. Clockwise here makes an upward swipe carry the
+        // visible front face upward.
+        Some(Swipe(Vertical, dy > 0.0 ? CounterClockwise : Clockwise))
       } else {
         None
       }

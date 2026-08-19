@@ -23,9 +23,7 @@ describe("Cube3D two-finger twist", () => {
   })
 
   test("maps vertical and horizontal face flips onto the cube x and y axes", () => {
-    expect(Cube3D.faceFlipMove(TwistGesture.Vertical, CounterClockwise))->toEqual(
-      MoveX(CounterClockwise),
-    )
+    expect(Cube3D.faceFlipMove(TwistGesture.Vertical, Clockwise))->toEqual(MoveX(Clockwise))
     expect(Cube3D.faceFlipMove(TwistGesture.Horizontal, Clockwise))->toEqual(MoveY(Clockwise))
   })
 })
