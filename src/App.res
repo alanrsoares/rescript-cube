@@ -23,6 +23,18 @@ external castEvtToKey: Dom.event => {
   "target": {"tagName": string},
 } = "%identity"
 
+type rubikViewProps = {
+  theme: themeName,
+  animSpeed: float,
+  onContextInit: cubeContext => unit,
+  onMoveCompleted: move => unit,
+}
+
+@module("./components/LazyRubikView.js")
+external loadRubikView: unit => promise<React.component<rubikViewProps>> = "load"
+
+let lazyRubikView = React.lazy_(loadRubikView)
+
 // Phone: one viewport-tall app, the cube is the hero and the panels live behind
 // a bottom tab bar. Desktop (lg): the page scrolls and every panel is on screen.
 module AppLayout = {
@@ -40,6 +52,12 @@ module MainGrid = {
 module CanvasCard = {
   let make = Tw.div(
     "plastic-panel relative min-h-[180px] w-full flex-1 rounded-xl border bg-card p-2 sm:p-3 lg:aspect-[4/3] lg:flex-none",
+  )
+}
+
+module CubeSplash = {
+  let make = Tw.div(
+    "plastic-well flex h-full min-h-[180px] w-full flex-col items-center justify-center gap-3 rounded-lg border bg-background text-muted-foreground lg:min-h-[420px]",
   )
 }
 
@@ -318,12 +336,32 @@ let make = () => {
     <MainGrid>
       <section className="flex min-h-0 flex-1 flex-col gap-3 lg:col-span-7 lg:gap-4">
         <CanvasCard>
-          <RubikView
-            theme={currentTheme}
-            animSpeed={animSpeed}
-            onContextInit={handleContextInit}
-            onMoveCompleted={handleMoveCompleted}
-          />
+          <React.Suspense
+            fallback={<CubeSplash>
+              <div className="grid grid-cols-3 gap-1" ariaLabel="Loading cube">
+                <span className="size-3 animate-pulse rounded-sm bg-primary/85" />
+                <span
+                  className="size-3 animate-pulse rounded-sm bg-primary/65 [animation-delay:120ms]"
+                />
+                <span
+                  className="size-3 animate-pulse rounded-sm bg-primary/45 [animation-delay:240ms]"
+                />
+              </div>
+              <span className="text-xs font-medium tracking-[0.18em] uppercase">
+                {renderString("Loading cube")}
+              </span>
+            </CubeSplash>}
+          >
+            {React.createElement(
+              lazyRubikView,
+              {
+                theme: currentTheme,
+                animSpeed,
+                onContextInit: handleContextInit,
+                onMoveCompleted: handleMoveCompleted,
+              },
+            )}
+          </React.Suspense>
           {isSolved
             ? <SolvedBadge>
                 {Icon.render(Icon.check, ~size=14)}

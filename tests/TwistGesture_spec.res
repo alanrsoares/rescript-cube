@@ -23,6 +23,14 @@ let twistTo = (degrees: array<float>) => {
   })
 }
 
+let swipeTo = (x, y) => {
+  let (a, b) = grip(0.0)
+  TwistGesture.start(a, b)->TwistGesture.update(
+    {x: a.x +. x, y: a.y +. y},
+    {x: b.x +. x, y: b.y +. y},
+  )
+}
+
 describe("TwistGesture", () => {
   test("stays undecided while the fingers are only settling", () => {
     expect(twistTo([4.0, -3.0, 6.0])->TwistGesture.direction)->toEqual(None)
@@ -46,5 +54,17 @@ describe("TwistGesture", () => {
 
   test("cancels itself when the twist comes back to where it started", () => {
     expect(twistTo([30.0, 15.0, 0.0])->TwistGesture.direction)->toEqual(None)
+  })
+
+  test("classifies a two-finger upward translation as a vertical face flip", () => {
+    expect(swipeTo(0.0, -30.0)->TwistGesture.interaction)->toEqual(
+      Some(TwistGesture.Swipe(Vertical, CounterClockwise)),
+    )
+  })
+
+  test("classifies a two-finger rightward translation as a horizontal face flip", () => {
+    expect(swipeTo(30.0, 0.0)->TwistGesture.interaction)->toEqual(
+      Some(TwistGesture.Swipe(Horizontal, Clockwise)),
+    )
   })
 })

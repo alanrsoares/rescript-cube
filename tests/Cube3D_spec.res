@@ -2,6 +2,7 @@
 
 open BunTest
 open BunTest.Expect
+open CubeTypes
 
 describe("Cube3D gesture layers", () => {
   test("keeps the lower edge of the middle slice in the center band", () => {
@@ -19,6 +20,13 @@ describe("Cube3D two-finger twist", () => {
     expect(Cube3D.twistProgress(0.0))->toBe(0.0)
     expect(Cube3D.twistProgress(Math.Constants.pi /. 4.0))->toBe(0.5)
     expect(Cube3D.twistProgress(Math.Constants.pi))->toBe(1.0)
+  })
+
+  test("maps vertical and horizontal face flips onto the cube x and y axes", () => {
+    expect(Cube3D.faceFlipMove(TwistGesture.Vertical, CounterClockwise))->toEqual(
+      MoveX(CounterClockwise),
+    )
+    expect(Cube3D.faceFlipMove(TwistGesture.Horizontal, Clockwise))->toEqual(MoveY(Clockwise))
   })
 })
 

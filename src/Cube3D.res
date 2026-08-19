@@ -19,6 +19,7 @@ type activeGesture = {
 }
 
 type twistTarget = FaceTwist | WholeCubeTwist
+type twoPointMode = AngularTwist | FaceFlipSwipe
 
 type animationState = {
   mutable isAnimating: bool,
@@ -72,6 +73,7 @@ type cubeContext = {
   mutable onWindowPointerRelease: Dom.event => unit,
   mutable twist: option<TwistInput.t>,
   mutable twistTarget: option<twistTarget>,
+  mutable twoPointMode: option<twoPointMode>,
 }
 
 type rectObj = {
@@ -715,35 +717,15 @@ let beginGesture = (
 }
 
 // A two-finger rotation maps directly onto a face or whole-cube quarter-turn.
-// The same progress scale drives every frame, then `settleGesture` finishes or
-// rewinds it.
+// A two-finger translation flips the whole cube on its screen x/y axes. Both
+// reuse the same pivot and settle path, so touch and Shift+drag scrub identically.
 let twistProgress = (turned: float): float => clamp(Math.abs(turned) /. (pi /. 2.0), 0.0, 1.0)
 
-let rec updateTwistGesture = (ctx: cubeContext, twist: TwistGesture.t) => {
-  switch ctx.activeGesture {
-  | None =>
-    switch TwistGesture.direction(twist) {
-    | Some(dir) =>
-      switch ctx.twistTarget {
-      | Some(target) =>
-        let localMove = switch target {
-        | FaceTwist => MoveF(dir)
-        | WholeCubeTwist => MoveZ(dir)
-        }
-        beginGesture(ctx, ViewFrame.relabel(viewFrame(ctx), localMove), 0.0, 0.0, 1.0, 0.0)
-        updateTwistGesture(ctx, twist)
-      | None => ()
-      }
-    | None => ()
-    }
-  | Some(_) =>
-    let progress = twistProgress(twist.turned)
-    ctx.animState.rotatedAngle = ctx.animState.targetAngle *. progress
-    let quat = createQuaternion()->setFromAxisAngle(ctx.animState.axis, ctx.animState.rotatedAngle)
-    setQuaternionVec(ctx.animState.pivotGroup, quat)
-    ctx.requestFrame()
+let faceFlipMove = (axis: TwistGesture.swipeAxis, dir: moveDir): move =>
+  switch axis {
+  | Horizontal => MoveY(dir)
+  | Vertical => MoveX(dir)
   }
-}
 
 let updateGesture = (ctx: cubeContext, gesture: activeGesture, x: float, y: float) => {
   let distance =
@@ -753,6 +735,53 @@ let updateGesture = (ctx: cubeContext, gesture: activeGesture, x: float, y: floa
   let quat = createQuaternion()->setFromAxisAngle(ctx.animState.axis, ctx.animState.rotatedAngle)
   setQuaternionVec(ctx.animState.pivotGroup, quat)
   ctx.requestFrame()
+}
+
+let rec updateTwistGesture = (ctx: cubeContext, twist: TwistGesture.t) => {
+  switch ctx.twoPointMode {
+  | Some(AngularTwist) =>
+    let progress = twistProgress(twist.turned)
+    ctx.animState.rotatedAngle = ctx.animState.targetAngle *. progress
+    let quat = createQuaternion()->setFromAxisAngle(ctx.animState.axis, ctx.animState.rotatedAngle)
+    setQuaternionVec(ctx.animState.pivotGroup, quat)
+    ctx.requestFrame()
+  | Some(FaceFlipSwipe) =>
+    switch ctx.activeGesture {
+    | Some(gesture) => updateGesture(ctx, gesture, twist.center.x, twist.center.y)
+    | None => ()
+    }
+  | None =>
+    switch TwistGesture.interaction(twist) {
+    | Some(Twist(dir)) =>
+      switch ctx.twistTarget {
+      | Some(target) =>
+        let localMove = switch target {
+        | FaceTwist => MoveF(dir)
+        | WholeCubeTwist => MoveZ(dir)
+        }
+        ctx.twoPointMode = Some(AngularTwist)
+        beginGesture(ctx, ViewFrame.relabel(viewFrame(ctx), localMove), 0.0, 0.0, 1.0, 0.0)
+        updateTwistGesture(ctx, twist)
+      | None => ()
+      }
+    | Some(Swipe(axis, dir)) => {
+        let localMove = faceFlipMove(axis, dir)
+        let dx = twist.center.x -. twist.startCenter.x
+        let dy = twist.center.y -. twist.startCenter.y
+        ctx.twoPointMode = Some(FaceFlipSwipe)
+        beginGesture(
+          ctx,
+          ViewFrame.relabel(viewFrame(ctx), localMove),
+          twist.startCenter.x,
+          twist.startCenter.y,
+          dx,
+          dy,
+        )
+        updateTwistGesture(ctx, twist)
+      }
+    | None => ()
+    }
+  }
 }
 
 let settleGesture = (ctx: cubeContext, commit: bool) => {
@@ -1021,6 +1050,7 @@ let init = (
     onWindowPointerRelease: _ => (),
     twist: None,
     twistTarget: None,
+    twoPointMode: None,
   }
 
   // Assigned after construction rather than through a spread: a closure built
@@ -1071,6 +1101,7 @@ let init = (
         | None => ()
         }
         ctx.twistTarget = None
+        ctx.twoPointMode = None
         setNoZoomTrackballControls(controls, false)
         setNoRotateTrackballControls(controls, false)
       },

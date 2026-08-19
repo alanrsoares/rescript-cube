@@ -7,7 +7,13 @@
 // Move and release are watched on `window`, so a finger that slides off the canvas
 // mid-twist keeps driving it and a release outside still ends it.
 
-type pointerEvt = {pointerId: int, clientX: float, clientY: float}
+type pointerEvt = {
+  pointerId: int,
+  clientX: float,
+  clientY: float,
+  shiftKey: bool,
+  pointerType: string,
+}
 external castEvt: Dom.event => pointerEvt = "%identity"
 
 type elemObj = {
@@ -22,7 +28,8 @@ external addWindowEventListener: (string, Dom.event => unit) => unit = "window.a
 external removeWindowEventListener: (string, Dom.event => unit) => unit =
   "window.removeEventListener"
 
-type live = {id: int, point: TwistGesture.point}
+type live = {id: int, point: TwistGesture.point, virtualFor: option<int>}
+let virtualGapPx = 48.0
 
 type t = {
   element: Dom.element,
@@ -47,6 +54,15 @@ let pair = (t: t): option<(live, live)> =>
 
 let isActive = (t: t): bool => t.gesture->Option.isSome
 
+let beginIfPaired = (t: t) =>
+  switch (t.gesture, pair(t)) {
+  | (None, Some((a, b))) =>
+    if t.onBegin() {
+      t.gesture = Some(TwistGesture.start(a.point, b.point))
+    }
+  | _ => ()
+  }
+
 let stop = (t: t) => {
   switch t.gesture {
   | Some(_) => t.onEnd()
@@ -58,23 +74,48 @@ let stop = (t: t) => {
 let handleDown = (t: t, e: Dom.event) => {
   let ev = castEvt(e)
   t.pointers = Array.concat(
-    t.pointers->Array.filter(p => p.id != ev.pointerId),
-    [{id: ev.pointerId, point: {x: ev.clientX, y: ev.clientY}}],
+    t.pointers->Array.filter(p => p.id != ev.pointerId && p.virtualFor != Some(ev.pointerId)),
+    [{id: ev.pointerId, point: {x: ev.clientX, y: ev.clientY}, virtualFor: None}],
   )
-  switch (t.gesture, pair(t)) {
-  | (None, Some((a, b))) =>
-    if t.onBegin() {
-      t.gesture = Some(TwistGesture.start(a.point, b.point))
-    }
-  | _ => ()
+
+  // Shift+drag is the desktop counterpart to moving a two-finger pair together.
+  // The virtual point remains a fixed distance beside the mouse, so the shared
+  // midpoint moves exactly as a real two-finger swipe would.
+  if ev.pointerType == "mouse" && ev.shiftKey && Array.length(t.pointers) == 1 {
+    t.pointers = Array.concat(
+      t.pointers,
+      [
+        {
+          id: -ev.pointerId,
+          point: {x: ev.clientX +. virtualGapPx, y: ev.clientY},
+          virtualFor: Some(ev.pointerId),
+        },
+      ],
+    )
   }
+  beginIfPaired(t)
 }
 
 let handleMove = (t: t, e: Dom.event) => {
   let ev = castEvt(e)
+
+  // Releasing Shift ends the emulated two-point gesture before a one-finger
+  // slice or trackball drag can take over again.
+  if ev.pointerType == "mouse" && !ev.shiftKey {
+    t.pointers = t.pointers->Array.filter(p => p.virtualFor != Some(ev.pointerId))
+    if Array.length(t.pointers) < 2 {
+      stop(t)
+    }
+  }
   t.pointers =
     t.pointers->Array.map(p =>
-      p.id == ev.pointerId ? {...p, point: {x: ev.clientX, y: ev.clientY}} : p
+      if p.id == ev.pointerId {
+        {...p, point: {x: ev.clientX, y: ev.clientY}}
+      } else if p.virtualFor == Some(ev.pointerId) {
+        {...p, point: {x: ev.clientX +. virtualGapPx, y: ev.clientY}}
+      } else {
+        p
+      }
     )
   switch (t.gesture, pair(t)) {
   | (Some(g), Some((a, b))) =>
@@ -87,7 +128,8 @@ let handleMove = (t: t, e: Dom.event) => {
 
 let handleRelease = (t: t, e: Dom.event) => {
   let ev = castEvt(e)
-  t.pointers = t.pointers->Array.filter(p => p.id != ev.pointerId)
+  t.pointers =
+    t.pointers->Array.filter(p => p.id != ev.pointerId && p.virtualFor != Some(ev.pointerId))
   if Array.length(t.pointers) < 2 {
     stop(t)
   }
