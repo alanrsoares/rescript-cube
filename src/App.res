@@ -68,6 +68,8 @@ let make = () => {
   // which stops two undos in one tick from reading the same cursor and replaying
   // the same turn twice.
   let timelineRef = React.useRef(timeline)
+  let initialScrambleRef = React.useRef((None: option<array<move>>))
+  let initialScrambleQueuedRef = React.useRef(false)
   let commitTimeline = (next: Timeline.t) => {
     timelineRef.current = next
     setTimeline(_ => next)
@@ -128,6 +130,32 @@ let make = () => {
     setCubeState(prev => CubeState.applyMove(prev, m))
   }
 
+  // Start from a real scramble through the normal animation path, but keep its
+  // moves out of the learner's history and leave the timer idle.
+  let handleContextInit = (ctx: cubeContext) => setCubeCtx(_ => Some(ctx))
+
+  React.useEffect(() => {
+    switch cubeCtx {
+    | Some(ctx) => {
+        let scramble = switch initialScrambleRef.current {
+        | Some(moves) => moves
+        | None => {
+            let moves = CubeSolver.generateScramble(20)
+            initialScrambleRef.current = Some(moves)
+            moves
+          }
+        }
+        if !initialScrambleQueuedRef.current {
+          initialScrambleQueuedRef.current = true
+          replayingRef.current = replayingRef.current + Array.length(scramble)
+          queueMoves(ctx, scramble)
+        }
+      }
+    | None => ()
+    }
+    None
+  }, [cubeCtx])
+
   // Only a scramble starts a timed attempt, so drills and free play never
   // record a personal best.
   let startTimerOnFirstMove = () =>
@@ -149,6 +177,20 @@ let make = () => {
   let handleTriggerMove = (m: move) =>
     switch cubeCtx {
     | Some(ctx) => handleQueue([ViewFrame.relabel(viewFrame(ctx), m)])
+    | None => ()
+    }
+
+  // Move labels follow the camera, so the preview must be localized through the
+  // same frame before it reaches the renderer.
+  let handlePreviewFace = (m: move) =>
+    switch cubeCtx {
+    | Some(ctx) => showFaceHighlight(ctx, ViewFrame.relabel(viewFrame(ctx), m))
+    | None => ()
+    }
+
+  let handleClearFacePreview = () =>
+    switch cubeCtx {
+    | Some(ctx) => clearFaceHighlight(ctx)
     | None => ()
     }
 
@@ -251,7 +293,7 @@ let make = () => {
           <RubikView
             theme={currentTheme}
             animSpeed={animSpeed}
-            onContextInit={ctx => setCubeCtx(_ => Some(ctx))}
+            onContextInit={handleContextInit}
             onMoveCompleted={handleMoveCompleted}
           />
           {isSolved
@@ -276,6 +318,8 @@ let make = () => {
             currentTheme={currentTheme}
             animSpeed={animSpeed}
             onTriggerMove={handleTriggerMove}
+            onPreviewFace={handlePreviewFace}
+            onClearFacePreview={handleClearFacePreview}
             onChangeTheme={t => setCurrentTheme(_ => t)}
             onChangeSpeed={spd => setAnimSpeed(_ => spd)}
           />

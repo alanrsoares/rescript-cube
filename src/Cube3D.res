@@ -53,6 +53,7 @@ type cubeContext = {
   coreMesh: mesh,
   cameraControls: trackballControls,
   cubies: array<mesh>,
+  faceHighlights: array<mesh>,
   cubieHomes: array<(int, int, int)>,
   animState: animationState,
   mutable materials: array<material>,
@@ -229,6 +230,48 @@ let updateThemeColors = (ctx: cubeContext, newTheme: themeName) => {
     let mo = castMeshToObj(mesh)
     mo.material = mats
   })
+}
+
+// A translucent cap sits just above each outer layer. It is a renderer-only
+// affordance: the hover preview never reads or changes the logical cube state.
+let createFaceHighlights = (): array<mesh> => {
+  let material = createMeshBasicMaterial({color: 0xffffff, transparent: true, opacity: 0.16})
+  let make = (width, height, depth, x, y, z) => {
+    let geometry = geometryFromRoundedBox(createRoundedBoxGeometry(width, height, depth, 2, 0.04))
+    let highlight = createMesh(geometry, material)
+    let _ = setVector3(getPosition(highlight), x, y, z)
+    setVisible(highlight, false)
+    highlight
+  }
+
+  [
+    make(2.94, 0.03, 2.94, 0.0, 1.5, 0.0), // U
+    make(2.94, 0.03, 2.94, 0.0, -1.5, 0.0), // D
+    make(0.03, 2.94, 2.94, -1.5, 0.0, 0.0), // L
+    make(0.03, 2.94, 2.94, 1.5, 0.0, 0.0), // R
+    make(2.94, 2.94, 0.03, 0.0, 0.0, 1.5), // F
+    make(2.94, 2.94, 0.03, 0.0, 0.0, -1.5), // B
+  ]
+}
+
+let clearFaceHighlight = (ctx: cubeContext) =>
+  ctx.faceHighlights->Array.forEach(highlight => setVisible(highlight, false))
+
+let showFaceHighlight = (ctx: cubeContext, m: move) => {
+  let index = switch m {
+  | MoveU(_) => Some(0)
+  | MoveD(_) => Some(1)
+  | MoveL(_) => Some(2)
+  | MoveR(_) => Some(3)
+  | MoveF(_) => Some(4)
+  | MoveB(_) => Some(5)
+  | MoveM(_) | MoveE(_) | MoveS(_) | MoveX(_) | MoveY(_) | MoveZ(_) => None
+  }
+  clearFaceHighlight(ctx)
+  switch index {
+  | Some(i) => setVisible(ctx.faceHighlights->Array.getUnsafe(i), true)
+  | None => ()
+  }
 }
 
 // Select matching cubies for a move
@@ -824,6 +867,9 @@ let init = (
     }
   }
 
+  let faceHighlights = createFaceHighlights()
+  faceHighlights->Array.forEach(highlight => add(cubeGroup, highlight))
+
   let animState = {
     isAnimating: false,
     currentMove: None,
@@ -848,6 +894,7 @@ let init = (
     coreMesh,
     cameraControls: controls,
     cubies,
+    faceHighlights,
     cubieHomes,
     animState,
     materials,

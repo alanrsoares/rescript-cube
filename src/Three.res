@@ -90,6 +90,8 @@ external geometryFromRoundedBox: roundedBoxGeometry => geometry = "%identity"
 // Material
 type materialOptions = {
   color?: int,
+  transparent?: bool,
+  opacity?: float,
   roughness?: float,
   metalness?: float,
   clearcoat?: float,
