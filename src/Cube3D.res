@@ -65,8 +65,10 @@ type cubeContext = {
   mutable fittedCanvasWidth: float,
   mutable fittedCanvasHeight: float,
   canvasElem: Dom.element,
+  requestFrame: unit => unit,
   mutable cameraSnap: option<cameraSnap>,
   mutable onCanvasPointerDown: Dom.event => unit,
+  mutable onCanvasPointerMove: Dom.event => unit,
   mutable onWindowPointerRelease: Dom.event => unit,
   mutable twist: option<TwistInput.t>,
   mutable twistTarget: option<twistTarget>,
@@ -230,6 +232,7 @@ let updateThemeColors = (ctx: cubeContext, newTheme: themeName) => {
     let mo = castMeshToObj(mesh)
     mo.material = mats
   })
+  ctx.requestFrame()
 }
 
 // A translucent cap sits just above each outer layer. It is a renderer-only
@@ -254,8 +257,10 @@ let createFaceHighlights = (): array<mesh> => {
   ]
 }
 
-let clearFaceHighlight = (ctx: cubeContext) =>
+let clearFaceHighlight = (ctx: cubeContext) => {
   ctx.faceHighlights->Array.forEach(highlight => setVisible(highlight, false))
+  ctx.requestFrame()
+}
 
 let showFaceHighlight = (ctx: cubeContext, m: move) => {
   let index = switch m {
@@ -272,6 +277,7 @@ let showFaceHighlight = (ctx: cubeContext, m: move) => {
   | Some(i) => setVisible(ctx.faceHighlights->Array.getUnsafe(i), true)
   | None => ()
   }
+  ctx.requestFrame()
 }
 
 // Select matching cubies for a move
@@ -326,6 +332,7 @@ let getMoveAxisAndAngle = (m: move): (vector3, float) => {
 // Queue a move for execution
 let queueMove = (ctx: cubeContext, m: move) => {
   let _ = Array.push(ctx.animState.moveQueue, m)
+  ctx.requestFrame()
 }
 
 // Queue multiple moves
@@ -647,6 +654,7 @@ let beginCameraSnap = (ctx: cubeContext) => {
       elapsed: 0.0,
     })
   }
+  ctx.requestFrame()
 }
 
 // Runs instead of the trackball update, not alongside it: the controls carry a
@@ -703,6 +711,7 @@ let beginGesture = (
     directionX: dx /. length,
     directionY: dy /. length,
   })
+  ctx.requestFrame()
 }
 
 // A two-finger rotation maps directly onto a face or whole-cube quarter-turn.
@@ -732,6 +741,7 @@ let rec updateTwistGesture = (ctx: cubeContext, twist: TwistGesture.t) => {
     ctx.animState.rotatedAngle = ctx.animState.targetAngle *. progress
     let quat = createQuaternion()->setFromAxisAngle(ctx.animState.axis, ctx.animState.rotatedAngle)
     setQuaternionVec(ctx.animState.pivotGroup, quat)
+    ctx.requestFrame()
   }
 }
 
@@ -742,6 +752,7 @@ let updateGesture = (ctx: cubeContext, gesture: activeGesture, x: float, y: floa
   ctx.animState.rotatedAngle = ctx.animState.targetAngle *. progress
   let quat = createQuaternion()->setFromAxisAngle(ctx.animState.axis, ctx.animState.rotatedAngle)
   setQuaternionVec(ctx.animState.pivotGroup, quat)
+  ctx.requestFrame()
 }
 
 let settleGesture = (ctx: cubeContext, commit: bool) => {
@@ -755,6 +766,7 @@ let settleGesture = (ctx: cubeContext, commit: bool) => {
     ctx.animState.shouldNotify = commit
     ctx.animState.isAnimating = true
     ctx.activeGesture = None
+    ctx.requestFrame()
   | None => ()
   }
 }
@@ -779,6 +791,7 @@ let cancelSliceGesture = (ctx: cubeContext) => {
     ctx.animState.activeCubies = []
     ctx.animState.rotatedAngle = 0.0
     ctx.activeGesture = None
+    ctx.requestFrame()
   | None => ()
   }
 }
@@ -873,6 +886,7 @@ let init = (
   ~scene: scene,
   ~camera: perspectiveCamera,
   ~renderer: webGLRenderer,
+  ~requestFrame: unit => unit,
   initialTheme: themeName,
 ): cubeContext => {
   // Start on a detent, so the opening framing matches every position the camera
@@ -1000,8 +1014,10 @@ let init = (
     fittedCanvasWidth: 0.0,
     fittedCanvasHeight: 0.0,
     canvasElem,
+    requestFrame,
     cameraSnap: None,
     onCanvasPointerDown: _ => (),
+    onCanvasPointerMove: _ => (),
     onWindowPointerRelease: _ => (),
     twist: None,
     twistTarget: None,
@@ -1012,9 +1028,14 @@ let init = (
   // one, and its writes would land on a value nothing else can see.
   // Release is watched on `window` so a drag ending outside the canvas still
   // settles the camera.
-  ctx.onCanvasPointerDown = _ => ctx.cameraSnap = None
+  ctx.onCanvasPointerDown = _ => {
+    ctx.cameraSnap = None
+    ctx.requestFrame()
+  }
+  ctx.onCanvasPointerMove = _ => ctx.requestFrame()
   ctx.onWindowPointerRelease = _ => beginCameraSnap(ctx)
   castDomElem(canvasElem).addEventListener("pointerdown", ctx.onCanvasPointerDown)
+  castDomElem(canvasElem).addEventListener("pointermove", ctx.onCanvasPointerMove)
   addWindowEventListener("pointerup", ctx.onWindowPointerRelease)
   addWindowEventListener("pointercancel", ctx.onWindowPointerRelease)
 
@@ -1074,6 +1095,7 @@ let dispose = (ctx: cubeContext) => {
   }
   ctx.twist = None
   castDomElem(ctx.canvasElem).removeEventListener("pointerdown", ctx.onCanvasPointerDown)
+  castDomElem(ctx.canvasElem).removeEventListener("pointermove", ctx.onCanvasPointerMove)
   removeWindowEventListener("pointerup", ctx.onWindowPointerRelease)
   removeWindowEventListener("pointercancel", ctx.onWindowPointerRelease)
   disposeTrackballControls(ctx.cameraControls)
@@ -1113,4 +1135,5 @@ let resetCube = (ctx: cubeContext) => {
       }
     }
   }
+  ctx.requestFrame()
 }

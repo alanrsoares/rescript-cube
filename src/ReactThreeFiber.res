@@ -13,6 +13,7 @@ type rootStateObj = {
   camera: perspectiveCamera,
   gl: webGLRenderer,
   size: {width: float, height: float},
+  invalidate: unit => unit,
 }
 
 external rootStateObj: rootState => rootStateObj = "%identity"
@@ -58,6 +59,7 @@ let primitive = (
 
 type canvasProps = {
   children: React.element,
+  frameloop?: string,
   onCreated?: rootState => unit,
 }
 

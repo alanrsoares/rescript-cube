@@ -85,6 +85,7 @@ let make = () => {
 
   let isSolved = CubeState.isSolved(cubeState)
   let wasSolvedRef = React.useRef(isSolved)
+  let suppressVictoryRef = React.useRef(false)
 
   // Timer tick
   React.useEffect(() => {
@@ -105,7 +106,7 @@ let make = () => {
 
   // Celebrate only on the transition into a solved cube.
   React.useEffect(() => {
-    if isSolved && !wasSolvedRef.current {
+    if isSolved && !wasSolvedRef.current && !suppressVictoryRef.current {
       Confetti.triggerVictory()
       setTimerState(st =>
         switch st {
@@ -120,6 +121,10 @@ let make = () => {
         }
       )
     }
+
+    // Reset and scramble intentionally pass through the solved state. Clear the
+    // one-shot guard once that transition has been observed (or skipped).
+    suppressVictoryRef.current = false
     wasSolvedRef.current = isSolved
     None
   }, [isSolved])
@@ -222,6 +227,7 @@ let make = () => {
     resetCube(ctx)
     setCubeState(_ => CubeState.solved())
     positionHistoryRef.current = []
+    suppressVictoryRef.current = true
 
     // `resetCube` drops the queue, so turns still owed to a seek will never land.
     // Forget them, or the next real move would be mistaken for a replay.
@@ -234,7 +240,13 @@ let make = () => {
     switch cubeCtx {
     | Some(ctx) =>
       restart(ctx)
-      queueMoves(ctx, CubeSolver.generateScramble(20))
+      let scramble = CubeSolver.generateScramble(20)
+
+      // Scrambles establish a position to solve; only the learner's moves belong
+      // in undo/redo history. The complete position history still retains them
+      // so the Solve action can reverse the scramble.
+      replayingRef.current = replayingRef.current + Array.length(scramble)
+      queueMoves(ctx, scramble)
       setTimerState(_ => Inspecting(15))
     | None => ()
     }

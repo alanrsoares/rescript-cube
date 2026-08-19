@@ -20,7 +20,13 @@ module CubeScene = {
     let r3f = ReactThreeFiber.rootStateObj(state)
 
     React.useEffect(() => {
-      let ctx = Cube3D.init(~scene=r3f.scene, ~camera=r3f.camera, ~renderer=r3f.gl, theme)
+      let ctx = Cube3D.init(
+        ~scene=r3f.scene,
+        ~camera=r3f.camera,
+        ~renderer=r3f.gl,
+        ~requestFrame=r3f.invalidate,
+        theme,
+      )
       ctx.onMoveCompleted = Some(onMoveCompleted)
       ctx.animState.animSpeed = animSpeed
       ctxRef.current = Some(ctx)
@@ -45,11 +51,20 @@ module CubeScene = {
       switch ctxRef.current {
       | Some(ctx) =>
         fitCameraToCanvas(ctx, r3f.size.width, r3f.size.height)
-        switch ctx.cameraSnap {
-        | Some(_) => updateCameraSnap(ctx, deltaSeconds)
-        | None => updateTrackballControls(ctx.cameraControls)
+        let cameraIsSnapping = switch ctx.cameraSnap {
+        | Some(_) =>
+          updateCameraSnap(ctx, deltaSeconds)
+          true
+        | None =>
+          updateTrackballControls(ctx.cameraControls)
+          false
         }
         updateAnimation(ctx, deltaSeconds)
+        if (
+          cameraIsSnapping || ctx.animState.isAnimating || Array.length(ctx.animState.moveQueue) > 0
+        ) {
+          r3f.invalidate()
+        }
       | None => ()
       }
     )
@@ -108,7 +123,7 @@ let make = (
   <div
     className="plastic-well relative h-full min-h-[180px] w-full cursor-grab select-none overflow-hidden rounded-lg border bg-background touch-none active:cursor-grabbing lg:min-h-[420px]"
   >
-    <ReactThreeFiber.canvas onCreated={created => setState(_ => Some(created))}>
+    <ReactThreeFiber.canvas frameloop="demand" onCreated={created => setState(_ => Some(created))}>
       {switch state {
       | Some(r3fState) =>
         <CubeScene state={r3fState} theme animSpeed onContextInit onMoveCompleted />
