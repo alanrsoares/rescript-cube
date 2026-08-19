@@ -922,9 +922,9 @@ let init = (
   addWindowEventListener("pointerup", ctx.onWindowPointerRelease)
   addWindowEventListener("pointercancel", ctx.onWindowPointerRelease)
 
-  // Two fingers twisting: on the face in front of the learner it turns that face,
-  // anywhere else it rolls the whole cube. It is also the only gesture that reaches
-  // the front and back layers, which `faceTowardCamera` keeps a one-finger drag off.
+  // A two-finger twist turns the touched front face (or rolls the cube elsewhere).
+  // A mostly vertical two-finger swipe instead brings the visible front face up or
+  // down. Both bypass one-finger dragging, which cannot reach the front/back layer.
   ctx.twist = Some(
     TwistInput.attach(
       canvasElem,
@@ -940,10 +940,17 @@ let init = (
         setNoZoomTrackballControls(controls, true)
         setNoRotateTrackballControls(controls, true)
       },
-      ~onCommit=dir =>
+      ~onCommit=intent =>
         if !ctx.animState.isAnimating && Array.length(ctx.animState.moveQueue) == 0 {
           let frame = viewFrame(ctx)
-          queueMove(ctx, ViewFrame.relabel(frame, ctx.twistOnFace ? MoveF(dir) : MoveZ(dir)))
+          let move = switch intent {
+          | TwistGesture.Twist(dir) => ctx.twistOnFace ? MoveF(dir) : MoveZ(dir)
+          // A positive X turn drops the front face; reverse it to carry the
+          // visible front face up, matching the direction of the two-finger swipe.
+          | TwistGesture.SwipeUp => MoveX(CounterClockwise)
+          | TwistGesture.SwipeDown => MoveX(Clockwise)
+          }
+          queueMove(ctx, ViewFrame.relabel(frame, move))
         },
       ~onEnd=() => {
         setNoZoomTrackballControls(controls, false)

@@ -7,8 +7,6 @@
 // Move and release are watched on `window`, so a finger that slides off the canvas
 // mid-twist keeps driving it and a release outside still ends it.
 
-open CubeTypes
-
 type pointerEvt = {pointerId: int, clientX: float, clientY: float}
 external castEvt: Dom.event => pointerEvt = "%identity"
 
@@ -34,7 +32,7 @@ type t = {
   // every further degree of rotation.
   mutable committed: bool,
   onBegin: unit => unit,
-  onCommit: moveDir => unit,
+  onCommit: TwistGesture.intent => unit,
   onEnd: unit => unit,
   mutable onDown: Dom.event => unit,
   mutable onMove: Dom.event => unit,
@@ -84,10 +82,10 @@ let handleMove = (t: t, e: Dom.event) => {
     let next = TwistGesture.update(g, a.point, b.point)
     t.gesture = Some(next)
     if !t.committed {
-      switch TwistGesture.direction(next) {
-      | Some(dir) =>
+      switch TwistGesture.intent(next, a.point, b.point) {
+      | Some(intent) =>
         t.committed = true
-        t.onCommit(dir)
+        t.onCommit(intent)
       | None => ()
       }
     }
@@ -106,7 +104,7 @@ let handleRelease = (t: t, e: Dom.event) => {
 let attach = (
   element: Dom.element,
   ~onBegin: unit => unit,
-  ~onCommit: moveDir => unit,
+  ~onCommit: TwistGesture.intent => unit,
   ~onEnd: unit => unit,
 ): t => {
   let t = {

@@ -60,7 +60,8 @@ let make = () => {
   let (timerMs, setTimerMs) = React.useState(() => 0.0)
   let (bestTime, setBestTime) = React.useState(() => Timer.getBestTime())
   let (showModal, setShowModal) = React.useState(() => false)
-  let (tab, setTab) = React.useState((): option<MobileTabs.tab> => Some(#coach))
+  // Phone sheets start collapsed so the cube owns the opening viewport.
+  let (tab, setTab) = React.useState((): option<MobileTabs.tab> => None)
   let closeTab = () => setTab(_ => None)
 
   // The timeline drives an imperative move queue, so the ref is authoritative and
