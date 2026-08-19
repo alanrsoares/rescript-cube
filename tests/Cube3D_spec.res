@@ -14,6 +14,14 @@ describe("Cube3D gesture layers", () => {
   })
 })
 
+describe("Cube3D two-finger twist", () => {
+  test("maps finger rotation continuously onto a quarter turn", () => {
+    expect(Cube3D.twistProgress(0.0))->toBe(0.0)
+    expect(Cube3D.twistProgress(Math.Constants.pi /. 4.0))->toBe(0.5)
+    expect(Cube3D.twistProgress(Math.Constants.pi))->toBe(1.0)
+  })
+})
+
 // The camera snaps to a 3×3 grid around each face without flipping a view from
 // below back over the equator.
 describe("Cube3D camera detents", () => {

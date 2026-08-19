@@ -1,8 +1,8 @@
 // src/cube/TwistGesture.res - two fingers twisting, as an angle.
 //
 // Tracks the angle of the segment between two pointers and the signed rotation
-// accumulated since they went down. It decides only when a twist has been meant;
-// what the twist turns is the caller's business.
+// accumulated since they went down. The caller decides how to render that
+// continuous rotation and when to settle it.
 //
 // Pure: plain screen coordinates in, a direction out.
 
@@ -10,35 +10,19 @@ open CubeTypes
 
 type point = {x: float, y: float}
 
-type intent =
-  | Twist(moveDir)
-  | SwipeUp
-  | SwipeDown
-  | SwipeLeft
-  | SwipeRight
-
-type t = {previous: float, turned: float, startCenter: point}
+type t = {previous: float, turned: float}
 
 let pi = Math.Constants.pi
 
 // Below this the twist is indistinguishable from two fingers settling on the
-// glass, where the segment between them swings a few degrees on its own.
-let commitDegrees = 22.0
+// glass. It is used only to choose the initial turn direction; interpolation
+// remains continuous once the pivot is live.
+let commitDegrees = 8.0
 let commitRadians = commitDegrees *. pi /. 180.0
-
-// A two-finger swipe needs more travel than a twist needs rotation. Requiring one
-// screen axis to dominate preserves ordinary pinches and diagonal settles.
-let swipeCommitPx = 40.0
 
 let angleOf = (a: point, b: point): float => Math.atan2(~y=b.y -. a.y, ~x=b.x -. a.x)
 
-let centerOf = (a: point, b: point): point => {x: (a.x +. b.x) /. 2.0, y: (a.y +. b.y) /. 2.0}
-
-let start = (a: point, b: point): t => {
-  previous: angleOf(a, b),
-  turned: 0.0,
-  startCenter: centerOf(a, b),
-}
+let start = (a: point, b: point): t => {previous: angleOf(a, b), turned: 0.0}
 
 // Wrapped before accumulating. Successive samples are milliseconds apart, so a
 // raw difference near a full turn is the atan2 seam rather than real motion, and
@@ -54,7 +38,7 @@ let wrap = (angle: float): float =>
 
 let update = (t: t, a: point, b: point): t => {
   let now = angleOf(a, b)
-  {...t, previous: now, turned: t.turned +. wrap(now -. t.previous)}
+  {previous: now, turned: t.turned +. wrap(now -. t.previous)}
 }
 
 // Screen y grows downward, so a positive accumulated angle is clockwise on screen
@@ -67,19 +51,3 @@ let direction = (t: t): option<moveDir> =>
   } else {
     None
   }
-
-let intent = (t: t, a: point, b: point): option<intent> => {
-  let center = centerOf(a, b)
-  let dx = center.x -. t.startCenter.x
-  let dy = center.y -. t.startCenter.y
-  if Math.abs(dy) >= swipeCommitPx && Math.abs(dy) > Math.abs(dx) {
-    Some(dy < 0.0 ? SwipeUp : SwipeDown)
-  } else if Math.abs(dx) >= swipeCommitPx && Math.abs(dx) > Math.abs(dy) {
-    Some(dx < 0.0 ? SwipeLeft : SwipeRight)
-  } else {
-    switch direction(t) {
-    | Some(dir) => Some(Twist(dir))
-    | None => None
-    }
-  }
-}

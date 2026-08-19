@@ -28,11 +28,9 @@ type t = {
   element: Dom.element,
   mutable pointers: array<live>,
   mutable gesture: option<TwistGesture.t>,
-  // One turn per twist. Without this the same gesture would keep committing on
-  // every further degree of rotation.
-  mutable committed: bool,
-  onBegin: unit => unit,
-  onCommit: TwistGesture.intent => unit,
+  // The owner may decline when the cube is already animating.
+  onBegin: unit => bool,
+  onUpdate: TwistGesture.t => unit,
   onEnd: unit => unit,
   mutable onDown: Dom.event => unit,
   mutable onMove: Dom.event => unit,
@@ -47,13 +45,14 @@ let pair = (t: t): option<(live, live)> =>
   | _ => None
   }
 
+let isActive = (t: t): bool => t.gesture->Option.isSome
+
 let stop = (t: t) => {
   switch t.gesture {
   | Some(_) => t.onEnd()
   | None => ()
   }
   t.gesture = None
-  t.committed = false
 }
 
 let handleDown = (t: t, e: Dom.event) => {
@@ -64,9 +63,9 @@ let handleDown = (t: t, e: Dom.event) => {
   )
   switch (t.gesture, pair(t)) {
   | (None, Some((a, b))) =>
-    t.gesture = Some(TwistGesture.start(a.point, b.point))
-    t.committed = false
-    t.onBegin()
+    if t.onBegin() {
+      t.gesture = Some(TwistGesture.start(a.point, b.point))
+    }
   | _ => ()
   }
 }
@@ -81,14 +80,7 @@ let handleMove = (t: t, e: Dom.event) => {
   | (Some(g), Some((a, b))) =>
     let next = TwistGesture.update(g, a.point, b.point)
     t.gesture = Some(next)
-    if !t.committed {
-      switch TwistGesture.intent(next, a.point, b.point) {
-      | Some(intent) =>
-        t.committed = true
-        t.onCommit(intent)
-      | None => ()
-      }
-    }
+    t.onUpdate(next)
   | _ => ()
   }
 }
@@ -103,17 +95,16 @@ let handleRelease = (t: t, e: Dom.event) => {
 
 let attach = (
   element: Dom.element,
-  ~onBegin: unit => unit,
-  ~onCommit: TwistGesture.intent => unit,
+  ~onBegin: unit => bool,
+  ~onUpdate: TwistGesture.t => unit,
   ~onEnd: unit => unit,
 ): t => {
   let t = {
     element,
     pointers: [],
     gesture: None,
-    committed: false,
     onBegin,
-    onCommit,
+    onUpdate,
     onEnd,
     onDown: _ => (),
     onMove: _ => (),

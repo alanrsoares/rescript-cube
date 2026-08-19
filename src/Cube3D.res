@@ -67,9 +67,6 @@ type cubeContext = {
   mutable onCanvasPointerDown: Dom.event => unit,
   mutable onWindowPointerRelease: Dom.event => unit,
   mutable twist: option<TwistInput.t>,
-  // Whether the twist under way began on the face in front of the learner, which
-  // is what separates turning that face from rolling the whole cube.
-  mutable twistOnFace: bool,
 }
 
 type rectObj = {
@@ -705,6 +702,28 @@ let beginGesture = (
   })
 }
 
+// A two-finger rotation maps directly onto one face quarter-turn. The same
+// progress scale drives every frame, then `settleGesture` finishes or rewinds it.
+let twistProgress = (turned: float): float => clamp(Math.abs(turned) /. (pi /. 2.0), 0.0, 1.0)
+
+let rec updateTwistGesture = (ctx: cubeContext, twist: TwistGesture.t) => {
+  switch ctx.activeGesture {
+  | None =>
+    switch TwistGesture.direction(twist) {
+    | Some(dir) =>
+      let move = ViewFrame.relabel(viewFrame(ctx), MoveF(dir))
+      beginGesture(ctx, move, 0.0, 0.0, 1.0, 0.0)
+      updateTwistGesture(ctx, twist)
+    | None => ()
+    }
+  | Some(_) =>
+    let progress = twistProgress(twist.turned)
+    ctx.animState.rotatedAngle = ctx.animState.targetAngle *. progress
+    let quat = createQuaternion()->setFromAxisAngle(ctx.animState.axis, ctx.animState.rotatedAngle)
+    setQuaternionVec(ctx.animState.pivotGroup, quat)
+  }
+}
+
 let updateGesture = (ctx: cubeContext, gesture: activeGesture, x: float, y: float) => {
   let distance =
     (x -. gesture.startX) *. gesture.directionX +. (y -. gesture.startY) *. gesture.directionY
@@ -734,69 +753,107 @@ let endGesture = (ctx: cubeContext) => {
   setNoRotateTrackballControls(ctx.cameraControls, false)
 }
 
-let handleCubiePointerDown = (ctx: cubeContext, e: ReactThreeFiber.pointerEvent) => {
-  let event = ReactThreeFiber.pointerEventObj(e)
-  let nativeEvent = castEvtObj(event.nativeEvent)
-  if !ctx.animState.isAnimating && Array.length(ctx.animState.moveQueue) == 0 {
-    let targetMesh = event.object
-    let normal =
-      cloneVector3(getFaceNormal(event.face))->applyQuaternionVector3(getQuaternion(targetMesh))
-    if faceTowardCamera(ctx, normal) {
-      ctx.dragTarget = Some({
-        normal,
-        point: event.point,
-        screenX: nativeEvent.clientX,
-        screenY: nativeEvent.clientY,
-      })
-      setNoRotateTrackballControls(ctx.cameraControls, true)
-      ReactThreeFiber.setPointerCapture(event.target, nativeEvent.pointerId)
-    }
-  } else {
-    endGesture(ctx)
+// A second finger takes ownership from a pending slice drag. Restore the pivot
+// before the face rotation starts, so partial layer motion cannot leak into it.
+let cancelSliceGesture = (ctx: cubeContext) => {
+  ctx.dragTarget = None
+  switch ctx.activeGesture {
+  | Some(_) =>
+    setQuaternionVec(ctx.animState.pivotGroup, createQuaternion())
+    updateMatrixWorld(ctx.animState.pivotGroup, true)
+    ctx.animState.activeCubies->Array.forEach(cubieMesh => attach(ctx.cubeGroup, cubieMesh))
+    remove(ctx.sceneRoot, ctx.animState.pivotGroup)
+    setVisible(ctx.coreMesh, true)
+    ctx.animState.currentMove = None
+    ctx.animState.activeCubies = []
+    ctx.animState.rotatedAngle = 0.0
+    ctx.activeGesture = None
+  | None => ()
   }
+}
+
+let twoFingerOwnsInput = (ctx: cubeContext): bool =>
+  switch ctx.twist {
+  | Some(twist) => TwistInput.isActive(twist)
+  | None => false
+  }
+
+let withSliceInput = (ctx: cubeContext, f: unit => unit) =>
+  if !twoFingerOwnsInput(ctx) {
+    f()
+  }
+
+let handleCubiePointerDown = (ctx: cubeContext, e: ReactThreeFiber.pointerEvent) => {
+  withSliceInput(ctx, () => {
+    let event = ReactThreeFiber.pointerEventObj(e)
+    let nativeEvent = castEvtObj(event.nativeEvent)
+    if !ctx.animState.isAnimating && Array.length(ctx.animState.moveQueue) == 0 {
+      let targetMesh = event.object
+      let normal =
+        cloneVector3(getFaceNormal(event.face))->applyQuaternionVector3(getQuaternion(targetMesh))
+      if faceTowardCamera(ctx, normal) {
+        ctx.dragTarget = Some({
+          normal,
+          point: event.point,
+          screenX: nativeEvent.clientX,
+          screenY: nativeEvent.clientY,
+        })
+        setNoRotateTrackballControls(ctx.cameraControls, true)
+        ReactThreeFiber.setPointerCapture(event.target, nativeEvent.pointerId)
+      }
+    } else {
+      endGesture(ctx)
+    }
+  })
 }
 
 let handleCubiePointerMove = (ctx: cubeContext, e: ReactThreeFiber.pointerEvent) => {
-  let nativeEvent = ReactThreeFiber.pointerEventObj(e).nativeEvent->castEvtObj
-  switch ctx.dragTarget {
-  | None =>
-    switch ctx.activeGesture {
-    | Some(gesture) => updateGesture(ctx, gesture, nativeEvent.clientX, nativeEvent.clientY)
-    | None => ()
-    }
-  | Some(dt) =>
-    let dx = nativeEvent.clientX -. dt.screenX
-    let dy = nativeEvent.clientY -. dt.screenY
-    if Math.sqrt(dx *. dx +. dy *. dy) >= dragThresholdPx {
-      switch resolveGesture(ctx, dt, dx, dy) {
-      | Some(m) =>
-        beginGesture(ctx, m, dt.screenX, dt.screenY, dx, dy)
-        ctx.dragTarget = None
+  withSliceInput(ctx, () => {
+    let nativeEvent = ReactThreeFiber.pointerEventObj(e).nativeEvent->castEvtObj
+    switch ctx.dragTarget {
+    | None =>
+      switch ctx.activeGesture {
+      | Some(gesture) => updateGesture(ctx, gesture, nativeEvent.clientX, nativeEvent.clientY)
       | None => ()
       }
+    | Some(dt) =>
+      let dx = nativeEvent.clientX -. dt.screenX
+      let dy = nativeEvent.clientY -. dt.screenY
+      if Math.sqrt(dx *. dx +. dy *. dy) >= dragThresholdPx {
+        switch resolveGesture(ctx, dt, dx, dy) {
+        | Some(m) =>
+          beginGesture(ctx, m, dt.screenX, dt.screenY, dx, dy)
+          ctx.dragTarget = None
+        | None => ()
+        }
+      }
     }
-  }
+  })
 }
 
 let handleCubiePointerUp = (ctx: cubeContext, e: ReactThreeFiber.pointerEvent) => {
-  let event = ReactThreeFiber.pointerEventObj(e)
-  let nativeEvent = castEvtObj(event.nativeEvent)
-  ReactThreeFiber.releasePointerCapture(event.target, nativeEvent.pointerId)
-  switch ctx.activeGesture {
-  | Some(_) =>
-    let progress = Math.abs(ctx.animState.rotatedAngle) /. Math.abs(ctx.animState.targetAngle)
-    settleGesture(ctx, progress >= commitTurnAt)
-  | None => ()
-  }
-  endGesture(ctx)
+  withSliceInput(ctx, () => {
+    let event = ReactThreeFiber.pointerEventObj(e)
+    let nativeEvent = castEvtObj(event.nativeEvent)
+    ReactThreeFiber.releasePointerCapture(event.target, nativeEvent.pointerId)
+    switch ctx.activeGesture {
+    | Some(_) =>
+      let progress = Math.abs(ctx.animState.rotatedAngle) /. Math.abs(ctx.animState.targetAngle)
+      settleGesture(ctx, progress >= commitTurnAt)
+    | None => ()
+    }
+    endGesture(ctx)
+  })
 }
 
 let handleCubiePointerCancel = (ctx: cubeContext, e: ReactThreeFiber.pointerEvent) => {
-  let event = ReactThreeFiber.pointerEventObj(e)
-  let nativeEvent = castEvtObj(event.nativeEvent)
-  ReactThreeFiber.releasePointerCapture(event.target, nativeEvent.pointerId)
-  settleGesture(ctx, false)
-  endGesture(ctx)
+  withSliceInput(ctx, () => {
+    let event = ReactThreeFiber.pointerEventObj(e)
+    let nativeEvent = castEvtObj(event.nativeEvent)
+    ReactThreeFiber.releasePointerCapture(event.target, nativeEvent.pointerId)
+    settleGesture(ctx, false)
+    endGesture(ctx)
+  })
 }
 
 // Create the cube inside R3F's scene. Canvas owns the renderer, camera sizing,
@@ -936,7 +993,6 @@ let init = (
     onCanvasPointerDown: _ => (),
     onWindowPointerRelease: _ => (),
     twist: None,
-    twistOnFace: false,
   }
 
   // Assigned after construction rather than through a spread: a closure built
@@ -950,37 +1006,35 @@ let init = (
   addWindowEventListener("pointerup", ctx.onWindowPointerRelease)
   addWindowEventListener("pointercancel", ctx.onWindowPointerRelease)
 
-  // A two-finger twist turns the touched front face (or rolls the cube elsewhere).
-  // A two-finger swipe rotates the whole cube toward that screen direction. Both
-  // bypass one-finger dragging, which cannot reach the front/back layer.
+  // A two-finger twist scrubs the front face continuously. It is intentionally
+  // face-only: camera detents now cover reorienting the whole cube.
   ctx.twist = Some(
     TwistInput.attach(
       canvasElem,
-      ~onBegin=() => {
-        ctx.twistOnFace = switch ctx.dragTarget {
-        | Some(_) => true
-        | None => false
-        }
+      ~onBegin=() =>
+        if ctx.animState.isAnimating || Array.length(ctx.animState.moveQueue) > 0 {
+          false
+        } else {
+          switch ctx.dragTarget {
+          | None => false
+          | Some(_) =>
+            cancelSliceGesture(ctx)
 
-        // The twist supersedes the one-finger drag that started it, and the
-        // trackball's own two-finger zoom would otherwise fight it.
-        ctx.dragTarget = None
-        setNoZoomTrackballControls(controls, true)
-        setNoRotateTrackballControls(controls, true)
-      },
-      ~onCommit=intent =>
-        if !ctx.animState.isAnimating && Array.length(ctx.animState.moveQueue) == 0 {
-          let frame = viewFrame(ctx)
-          let move = switch intent {
-          | TwistGesture.Twist(dir) => ctx.twistOnFace ? MoveF(dir) : MoveZ(dir)
-          | TwistGesture.SwipeUp => MoveX(Clockwise)
-          | TwistGesture.SwipeDown => MoveX(CounterClockwise)
-          | TwistGesture.SwipeLeft => MoveY(Clockwise)
-          | TwistGesture.SwipeRight => MoveY(CounterClockwise)
+            // The two-finger gesture owns the canvas until both pointers release,
+            // and the trackball's own zoom must yield for that interval.
+            setNoZoomTrackballControls(controls, true)
+            setNoRotateTrackballControls(controls, true)
+            true
           }
-          queueMove(ctx, ViewFrame.relabel(frame, move))
         },
+      ~onUpdate=twist => updateTwistGesture(ctx, twist),
       ~onEnd=() => {
+        switch ctx.activeGesture {
+        | Some(_) =>
+          let progress = Math.abs(ctx.animState.rotatedAngle) /. Math.abs(ctx.animState.targetAngle)
+          settleGesture(ctx, progress >= commitTurnAt)
+        | None => ()
+        }
         setNoZoomTrackballControls(controls, false)
         setNoRotateTrackballControls(controls, false)
       },

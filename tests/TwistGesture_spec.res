@@ -47,36 +47,4 @@ describe("TwistGesture", () => {
   test("cancels itself when the twist comes back to where it started", () => {
     expect(twistTo([30.0, 15.0, 0.0])->TwistGesture.direction)->toEqual(None)
   })
-
-  test("reads a two-finger upward swipe independently of rotation", () => {
-    let (a, b) = (at(-40.0, 0.0), at(40.0, 0.0))
-    let movedA = at(-40.0, -50.0)
-    let movedB = at(40.0, -50.0)
-    let g = TwistGesture.start(a, b)->TwistGesture.update(movedA, movedB)
-    expect(TwistGesture.intent(g, movedA, movedB))->toEqual(Some(TwistGesture.SwipeUp))
-  })
-
-  test("reads a two-finger downward swipe independently of rotation", () => {
-    let (a, b) = (at(-40.0, 0.0), at(40.0, 0.0))
-    let movedA = at(-40.0, 50.0)
-    let movedB = at(40.0, 50.0)
-    let g = TwistGesture.start(a, b)->TwistGesture.update(movedA, movedB)
-    expect(TwistGesture.intent(g, movedA, movedB))->toEqual(Some(TwistGesture.SwipeDown))
-  })
-
-  test("reads a two-finger leftward swipe independently of rotation", () => {
-    let (a, b) = (at(-40.0, 0.0), at(40.0, 0.0))
-    let movedA = at(-90.0, 0.0)
-    let movedB = at(-10.0, 0.0)
-    let g = TwistGesture.start(a, b)->TwistGesture.update(movedA, movedB)
-    expect(TwistGesture.intent(g, movedA, movedB))->toEqual(Some(TwistGesture.SwipeLeft))
-  })
-
-  test("reads a two-finger rightward swipe independently of rotation", () => {
-    let (a, b) = (at(-40.0, 0.0), at(40.0, 0.0))
-    let movedA = at(10.0, 0.0)
-    let movedB = at(90.0, 0.0)
-    let g = TwistGesture.start(a, b)->TwistGesture.update(movedA, movedB)
-    expect(TwistGesture.intent(g, movedA, movedB))->toEqual(Some(TwistGesture.SwipeRight))
-  })
 })
